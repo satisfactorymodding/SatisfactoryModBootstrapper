@@ -2,18 +2,21 @@
 #define XINPUT1_3_DLLLOADER_H
 
 #include <Windows.h>
+#include <unordered_map>
+#include <MemoryModule.h>
 #include "ImportResover.h"
 
 class DllLoader {
-private:
+public:
     ImportResolver* resolver;
+    std::unordered_map<std::string, HLOADEDMODULE> loadedModules;
 
 public:
     DllLoader(ImportResolver* importResolver) : resolver(importResolver) {};
 
-    HMODULE LoadModule(const char* filePath);
+    HLOADEDMODULE LoadModule(const char* filePath);
 
-    HMODULE LoadModule(const void * addr, size_t size);
+    HLOADEDMODULE LoadModule(const char* moduleName, const void * addr, size_t size);
 };
 
 

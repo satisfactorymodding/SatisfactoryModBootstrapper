@@ -29,7 +29,7 @@
 
 #include <windows.h>
 
-typedef void *HMEMORYMODULE;
+typedef void *HLOADEDMODULE;
 
 typedef void *HMEMORYRSRC;
 
@@ -51,7 +51,7 @@ typedef void (*CustomFreeLibraryFunc)(HCUSTOMMODULE, void *);
  * All dependencies are resolved using default LoadLibrary/GetProcAddress
  * calls through the Windows API.
  */
-HMEMORYMODULE MemoryLoadLibrary(const void *, size_t);
+HLOADEDMODULE MemoryLoadLibrary(const void *, size_t);
 
 /**
  * Load EXE/DLL from memory location with the given size using custom dependency
@@ -59,24 +59,24 @@ HMEMORYMODULE MemoryLoadLibrary(const void *, size_t);
  *
  * Dependencies will be resolved using passed callback methods.
  */
-HMEMORYMODULE MemoryLoadLibraryEx(const void *, size_t,
-    CustomAllocFunc,
-    CustomFreeFunc,
-    CustomLoadLibraryFunc,
-    CustomGetProcAddressFunc,
-    CustomFreeLibraryFunc,
-    void *);
+HLOADEDMODULE MemoryLoadLibraryEx(const void *, size_t,
+                                  CustomAllocFunc,
+                                  CustomFreeFunc,
+                                  CustomLoadLibraryFunc,
+                                  CustomGetProcAddressFunc,
+                                  CustomFreeLibraryFunc,
+                                  void *);
 
 /**
  * Get address of exported method. Supports loading both by name and by
  * ordinal value.
  */
-FARPROC MemoryGetProcAddress(HMEMORYMODULE, LPCSTR);
+FARPROC MemoryGetProcAddress(HLOADEDMODULE, LPCSTR);
 
 /**
  * Free previously loaded EXE/DLL.
  */
-void MemoryFreeLibrary(HMEMORYMODULE);
+void MemoryFreeLibrary(HLOADEDMODULE);
 
 /**
  * Execute entry point (EXE only). The entry point can only be executed
@@ -89,37 +89,37 @@ void MemoryFreeLibrary(HMEMORYMODULE);
  *
  * Returns a negative value if the entry point could not be executed.
  */
-int MemoryCallEntryPoint(HMEMORYMODULE);
+int MemoryCallEntryPoint(HLOADEDMODULE);
 
 /**
  * Find the location of a resource with the specified type and name.
  */
-HMEMORYRSRC MemoryFindResource(HMEMORYMODULE, LPCTSTR, LPCTSTR);
+HMEMORYRSRC MemoryFindResource(HLOADEDMODULE, LPCTSTR, LPCTSTR);
 
 /**
  * Find the location of a resource with the specified type, name and language.
  */
-HMEMORYRSRC MemoryFindResourceEx(HMEMORYMODULE, LPCTSTR, LPCTSTR, WORD);
+HMEMORYRSRC MemoryFindResourceEx(HLOADEDMODULE, LPCTSTR, LPCTSTR, WORD);
 
 /**
  * Get the size of the resource in bytes.
  */
-DWORD MemorySizeofResource(HMEMORYMODULE, HMEMORYRSRC);
+DWORD MemorySizeofResource(HLOADEDMODULE, HMEMORYRSRC);
 
 /**
  * Get a pointer to the contents of the resource.
  */
-LPVOID MemoryLoadResource(HMEMORYMODULE, HMEMORYRSRC);
+LPVOID MemoryLoadResource(HLOADEDMODULE, HMEMORYRSRC);
 
 /**
  * Load a string resource.
  */
-int MemoryLoadString(HMEMORYMODULE, UINT, LPTSTR, int);
+int MemoryLoadString(HLOADEDMODULE, UINT, LPTSTR, int);
 
 /**
  * Load a string resource with a given language.
  */
-int MemoryLoadStringEx(HMEMORYMODULE, UINT, LPTSTR, int, WORD);
+int MemoryLoadStringEx(HLOADEDMODULE, UINT, LPTSTR, int, WORD);
 
 /**
 * Default implementation of CustomAllocFunc that calls VirtualAlloc

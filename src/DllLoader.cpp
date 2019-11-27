@@ -2,57 +2,84 @@
 #include "logging.h"
 #include "naming_util.h"
 #include <stdexcept>
-#include <MemoryModule.h>
 
-ULONG64 placeholderLibrary = 0xDEADBEEF;
+struct ModuleInfo {
+    HMODULE module;
+    HLOADEDMODULE memoryModule;
+};
 
 FARPROC MemoryGetProcAddressResolver(HCUSTOMMODULE module, LPCSTR name, void *userdata) {
-    UNREFERENCED_PARAMETER(userdata);
-    if (module == &placeholderLibrary) {
-        //handle placeholder library here - resolve symbols using userdata
-        ImportResolver* resolver = reinterpret_cast<ImportResolver*>(userdata);
-        void* symbolAddress = resolver->ResolveSymbol(name);
+    auto* moduleInfo = static_cast<ModuleInfo *>(module);
+    if (moduleInfo->module != nullptr) {
+        return (FARPROC) GetProcAddress(moduleInfo->module, name);
+    } else if (moduleInfo->memoryModule != nullptr) {
+        return (FARPROC) MemoryGetProcAddress(moduleInfo->memoryModule, name);
+    } else {
+        auto* loader = reinterpret_cast<DllLoader*>(userdata);
+        void* symbolAddress = loader->resolver->ResolveSymbol(name);
         if (symbolAddress == nullptr) {
-            Logging::logFile << "Unresolved import for module: " << name << std::endl;
+            Logging::logFile << "Unresolved game import for module: " << name << std::endl;
         }
         return (FARPROC) symbolAddress;
     }
-    return (FARPROC) GetProcAddress((HMODULE) module, name);
 }
 
 HCUSTOMMODULE MemoryLoadLibraryWithPlaceholder(LPCSTR filename, void *userdata) {
-    UNREFERENCED_PARAMETER(userdata);
-    HMODULE result;
-    result = LoadLibraryA(filename);
-    if (result == NULL) {
-        //redirect not found libraries to placeholder address
-        return &placeholderLibrary;
+    auto* loader = reinterpret_cast<DllLoader*>(userdata);
+    auto memoryModule = loader->loadedModules.find(filename);
+    auto* moduleInfo = new ModuleInfo();
+    if (memoryModule != loader->loadedModules.end()) {
+        moduleInfo->memoryModule = memoryModule->second;
+    } else {
+        HMODULE module = LoadLibraryA(filename);
+        if (module != nullptr) {
+            moduleInfo->module = module;
+        }
     }
-    return (HCUSTOMMODULE) result;
+    return moduleInfo;
 }
 
 void MemoryFreeLibrarySafe(HCUSTOMMODULE module, void *userdata) {
-    UNREFERENCED_PARAMETER(userdata);
-    if (module != &placeholderLibrary) {
-        FreeLibrary((HMODULE) module);
+    auto* loader = reinterpret_cast<DllLoader*>(userdata);
+    auto* moduleInfo = static_cast<ModuleInfo *>(module);
+    if (moduleInfo->module != nullptr) {
+        FreeLibrary(moduleInfo->module);
+    } else if (moduleInfo->memoryModule != nullptr) {
+        MemoryFreeLibrary(moduleInfo->memoryModule);
+        for(const auto& pair : loader->loadedModules) {
+            if (pair.second == moduleInfo->memoryModule) {
+                loader->loadedModules.erase(pair.first);
+            }
+        }
     }
+    delete moduleInfo;
 }
 
-HMODULE DllLoader::LoadModule(const void* addr, size_t size) {
-    HMEMORYMODULE handle = MemoryLoadLibraryEx(addr, size,
-            MemoryDefaultAlloc,
-            MemoryDefaultFree,
-            MemoryLoadLibraryWithPlaceholder,
-            MemoryGetProcAddressResolver,
-            MemoryFreeLibrarySafe,
-            this->resolver);
+HLOADEDMODULE DllLoader::LoadModule(const char* moduleName, const void* addr, size_t size) {
+    HLOADEDMODULE handle = MemoryLoadLibraryEx(addr, size,
+                                               MemoryDefaultAlloc,
+                                               MemoryDefaultFree,
+                                               MemoryLoadLibraryWithPlaceholder,
+                                               MemoryGetProcAddressResolver,
+                                               MemoryFreeLibrarySafe,
+                                               this);
     if (handle == nullptr) {
         Logging::logFile << "Failed to load module from memory: " << GetLastErrorAsString() << std::endl;
+    }
+    if (handle != nullptr) {
+        this->loadedModules.insert({moduleName, handle});
     }
     return static_cast<HMODULE>(handle);
 }
 
-HMODULE DllLoader::LoadModule(const char *filePath) {
+HLOADEDMODULE DllLoader::LoadModule(const char *filePath) {
+    std::string fileName(filePath);
+    size_t lastSlashIndex = fileName.find_last_of('\\');
+    if (lastSlashIndex == std::string::npos)
+        lastSlashIndex = fileName.find_last_of('/');
+    if (lastSlashIndex != std::string::npos) {
+        fileName.erase(lastSlashIndex + 1);
+    }
     HANDLE fileHandle = CreateFileA(filePath, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (fileHandle == nullptr) {
         std::string str("Failed to open module file: ");
@@ -71,10 +98,10 @@ HMODULE DllLoader::LoadModule(const char *filePath) {
         throw std::invalid_argument(str.c_str());
     }
     try {
-        HMODULE result = LoadModule(readBuffer, fileSize);
+        HLOADEDMODULE result = LoadModule(fileName.c_str(), readBuffer, fileSize);
         free(readBuffer);
         return result;
-    } catch (std::exception ex) {
+    } catch (std::exception& ex) {
         free(readBuffer);
         throw ex;
     }

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 project(xinput1_3)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 enable_language(ASM_MASM)
 
 include_directories(typeinfo/include)
