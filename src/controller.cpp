@@ -47,7 +47,7 @@ void discoverLoaderMods(std::unordered_map<std::string, HLOADEDMODULE> discovere
     for (auto& file : std::filesystem::directory_iterator("loaders")) {
         if (file.is_regular_file() && file.path().extension() == "dll") {
             Logging::logFile << "Discovering loader module candidate " << file.path().filename() << std::endl;
-            HLOADEDMODULE loadedModule = dllLoader->LoadModule("UE4-ExampleMod-Win64-Shipping.dll");
+            HLOADEDMODULE loadedModule = dllLoader->LoadModule(file.path().generic_string().c_str());
             if (loadedModule != nullptr) {
                 Logging::logFile << "Successfully loaded module " << file.path().filename() << std::endl;
                 discoveredModules.insert({file.path().filename().string(), loadedModule});
