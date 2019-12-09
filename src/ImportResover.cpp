@@ -4,14 +4,12 @@
 #include <vector>
 #include <limits.h>
 #include <iostream>
-#include <pelib/PeLibAux.h>
-#include <pelib/PeFile.h>
 #include "naming_util.h"
+#include <psapi.h>
 
 using namespace std;
 
 BOOL CALLBACK ProcessFunctionCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, void* UserContext) {
-    UNREFERENCED_PARAMETER(SymbolSize);
     auto* resultVec = static_cast<vector<SymbolInfo>*>(UserContext);
     SymbolInfo symbolInfo{};
     symbolInfo.Name = pSymInfo->Name;
@@ -22,7 +20,7 @@ BOOL CALLBACK ProcessFunctionCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, v
 }
 
 static const TCHAR* StaticConfigName() {
-    return TEXT("DummyConfigName");
+    return TEXT("UObject");
 }
 
 ULONG64 findSymbolLocation(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& infoText, std::string& functionSignature) {
@@ -76,13 +74,21 @@ ImportResolver::ImportResolver(const char* gameModuleName) {
     if (hGamePrimaryModule == nullptr) {
         throw std::invalid_argument("Game module with name specified cannot be found");
     }
-
     SymInitialize(hProcess, nullptr, FALSE);
-    this->gameDllBase = SymLoadModuleEx(hProcess, nullptr, gameModuleName, nullptr, (DWORD64) hGamePrimaryModule, 0, nullptr, 0);
+    char moduleFileNameRaw[2048];
+    GetModuleFileNameA(hGamePrimaryModule, moduleFileNameRaw, 2048);
+    std::string moduleFileName(moduleFileNameRaw);
+    moduleFileName.replace(moduleFileName.find_last_of('.'), 4, ".pdb");
+    Logging::logFile << "PDB file path: " << moduleFileName << std::endl;
+    //have to use PDB file path here because for some reason for executable it cannot find static symbols
+    MODULEINFO moduleInfo;
+    GetModuleInformation(hProcess, hGamePrimaryModule, &moduleInfo, sizeof(moduleInfo));
+    Logging::logFile << "Game Module Size: " << moduleInfo.SizeOfImage << "; DllBase = " << moduleInfo.lpBaseOfDll << std::endl;
+    this->gameDllBase = SymLoadModuleEx(hProcess, nullptr, moduleFileName.c_str(), gameModuleName,
+            (DWORD64) moduleInfo.lpBaseOfDll, moduleInfo.SizeOfImage, nullptr, 0);
     if (gameDllBase == NULL) {
         throw std::invalid_argument("Cannot load debug symbols for specified game module");
     }
-
     this->typeInfoDump = new CTypeInfoDump(hProcess, gameDllBase);
     this->infoText = new CTypeInfoText(typeInfoDump);
 }

@@ -56,6 +56,7 @@ void MemoryFreeLibrarySafe(HCUSTOMMODULE module, void *userdata) {
 }
 
 HLOADEDMODULE DllLoader::LoadModule(const char* moduleName, const void* addr, size_t size) {
+    Logging::logFile << "Loading module " << moduleName << std::endl;
     HLOADEDMODULE handle = MemoryLoadLibraryEx(addr, size,
                                                MemoryDefaultAlloc,
                                                MemoryDefaultFree,
@@ -64,23 +65,24 @@ HLOADEDMODULE DllLoader::LoadModule(const char* moduleName, const void* addr, si
                                                MemoryFreeLibrarySafe,
                                                this);
     if (handle == nullptr) {
-        Logging::logFile << "Failed to load module from memory: " << GetLastErrorAsString() << std::endl;
+        Logging::logFile << "Failed to load module " << moduleName << ": " << GetLastErrorAsString() << std::endl;
+        throw std::invalid_argument(GetLastErrorAsString().c_str());
     }
-    if (handle != nullptr) {
-        this->loadedModules.insert({moduleName, handle});
-    }
+    Logging::logFile << "Loaded Module with Name " << moduleName << std::endl;
+    this->loadedModules.insert({moduleName, handle});
     return static_cast<HMODULE>(handle);
 }
 
-HLOADEDMODULE DllLoader::LoadModule(const char *filePath) {
-    std::string fileName(filePath);
+HLOADEDMODULE DllLoader::LoadModule(const wchar_t* filePath) {
+    std::wstring fileName(filePath);
     size_t lastSlashIndex = fileName.find_last_of('\\');
     if (lastSlashIndex == std::string::npos)
         lastSlashIndex = fileName.find_last_of('/');
     if (lastSlashIndex != std::string::npos) {
-        fileName.erase(lastSlashIndex + 1);
+        fileName.erase(0,lastSlashIndex + 1);
     }
-    HANDLE fileHandle = CreateFileA(filePath, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    Logging::logFile << "Loading module from " << filePath << std::endl;
+    HANDLE fileHandle = CreateFileW(filePath, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (fileHandle == nullptr) {
         std::string str("Failed to open module file: ");
         str.append(GetLastErrorAsString());
@@ -97,12 +99,8 @@ HLOADEDMODULE DllLoader::LoadModule(const char *filePath) {
         str.append(lastErrorString);
         throw std::invalid_argument(str.c_str());
     }
-    try {
-        HLOADEDMODULE result = LoadModule(fileName.c_str(), readBuffer, fileSize);
-        free(readBuffer);
-        return result;
-    } catch (std::exception& ex) {
-        free(readBuffer);
-        throw ex;
-    }
+    char convertedName[500];
+    wcstombs_s(nullptr, convertedName, fileName.c_str(), 500);
+    HLOADEDMODULE result = LoadModule(convertedName, readBuffer, fileSize);
+    return result;
 }

@@ -30,7 +30,7 @@ void EXPORTS_AddThreadAttachHandler(ThreadAttachHandler attachHandler) {
     if (performedThreadAttach) attachHandler();
 }
 
-HLOADEDMODULE EXPORTS_LoadModule(const char* filePath) {
+HLOADEDMODULE EXPORTS_LoadModule(const wchar_t* filePath) {
     if (dllLoader == nullptr) {
         Logging::logFile << "WARNING: loadPatchModule called before dllLoader was initialized!" << std::endl;
         return nullptr;
@@ -44,10 +44,18 @@ FARPROC EXPORTS_GetModuleProcAddress(HLOADEDMODULE module, const char* symbolNam
 }
 
 void discoverLoaderMods(std::unordered_map<std::string, HLOADEDMODULE> discoveredModules) {
-    for (auto& file : std::filesystem::directory_iterator("loaders")) {
-        if (file.is_regular_file() && file.path().extension() == "dll") {
+    std::filesystem::path directoryPath("loaders");
+    std::filesystem::create_directories(directoryPath);
+    for (auto& file : std::filesystem::directory_iterator(directoryPath)) {
+        if (file.is_regular_file() && file.path().extension() == ".dll") {
             Logging::logFile << "Discovering loader module candidate " << file.path().filename() << std::endl;
-            HLOADEDMODULE loadedModule = dllLoader->LoadModule(file.path().generic_string().c_str());
+            HLOADEDMODULE loadedModule = nullptr;
+            try {
+                loadedModule = dllLoader->LoadModule(file.path().generic_wstring().c_str());
+            } catch (std::exception& ex) {
+                Logging::logFile << "[FATAL] Failed to load module " << file.path().filename() << ": " << ex.what() << std::endl;
+                exit(1);
+            }
             if (loadedModule != nullptr) {
                 Logging::logFile << "Successfully loaded module " << file.path().filename() << std::endl;
                 discoveredModules.insert({file.path().filename().string(), loadedModule});
@@ -56,7 +64,7 @@ void discoverLoaderMods(std::unordered_map<std::string, HLOADEDMODULE> discovere
     }
 }
 
-void bootstrapLoaderMods(const std::unordered_map<std::string, HLOADEDMODULE>& discoveredModules) {
+void bootstrapLoaderMods(const std::unordered_map<std::string, HLOADEDMODULE>& discoveredModules, const std::wstring& executablePath) {
     for (auto& loaderModule : discoveredModules) {
         FARPROC bootstrapFunc = MemoryGetProcAddress(loaderModule.second, "BootstrapModule");
         if (bootstrapFunc == nullptr) {
@@ -64,7 +72,7 @@ void bootstrapLoaderMods(const std::unordered_map<std::string, HLOADEDMODULE>& d
             return;
         }
         BootstrapAccessors accessors{
-            Logging::logFile,
+            executablePath,
             &EXPORTS_LoadModule,
             &EXPORTS_GetModuleProcAddress,
             &EXPORTS_IsLoaderModuleLoaded,
@@ -85,11 +93,14 @@ void setupExecutableHook() {
     try {
         auto* resolver = new ImportResolver(GAME_MODULE_NAME);
         dllLoader = new DllLoader(resolver);
+        wchar_t pathBuffer[2048]; //just to be sure it will always fit
+        GetModuleFileNameW(GetModuleHandleA(GAME_MODULE_NAME), pathBuffer, 2048);
+        std::wstring executablePath{pathBuffer};
         Logging::logFile << "Discovering loader modules..." << std::endl;
         std::unordered_map<std::string, HLOADEDMODULE> discoveredMods;
         discoverLoaderMods(discoveredMods);
         Logging::logFile << "Bootstrapping loader modules..." << std::endl;
-        bootstrapLoaderMods(discoveredMods);
+        bootstrapLoaderMods(discoveredMods, executablePath);
     } catch (std::exception& ex) {
         Logging::logFile << "[FATAL] Failed to initialize import resolver: " << ex.what() << std::endl;
         exit(1);
