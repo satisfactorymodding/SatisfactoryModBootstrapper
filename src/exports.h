@@ -3,22 +3,17 @@
 
 #include <string>
 
-typedef __int64 (far __stdcall *FARPROC)();
+typedef void* FUNCTION_PTR;
 typedef void* HLOADEDMODULE;
 typedef HLOADEDMODULE (*LoadModuleFunc)(const wchar_t* filePath);
-typedef FARPROC (*GetModuleProcAddress)(HLOADEDMODULE module, const char* symbolName);
-
-typedef void (*ThreadAttachHandler)();
-typedef void (*AddThreadAttachHandler)(ThreadAttachHandler attachHandler);
-
+typedef FUNCTION_PTR (*GetModuleProcAddress)(HLOADEDMODULE module, const char* symbolName);
 typedef bool (*IsLoaderModuleLoaded)(const char* moduleName);
 
 struct BootstrapAccessors {
-	std::wstring executablePath;
+	std::wstring gameRootDirectory;
     LoadModuleFunc LoadModule;
     GetModuleProcAddress GetModuleProcAddress;
     IsLoaderModuleLoaded IsLoaderModuleLoaded;
-    AddThreadAttachHandler AddThreadAttachHandler;
 };
 
 typedef void (*BootstrapModuleFunc)(BootstrapAccessors& accessors);

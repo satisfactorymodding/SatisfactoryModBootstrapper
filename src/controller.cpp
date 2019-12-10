@@ -3,31 +3,15 @@
 #include <MemoryModule.h>
 #include <filesystem>
 #include <mutex>
+#include <map>
 #include "exports.h"
 
 #define GAME_MODULE_NAME "FactoryGame-Win64-Shipping.exe"
 
 static DllLoader* dllLoader;
-static std::mutex attachHandlersMutex;
-static std::vector<ThreadAttachHandler> attachHandlers;
-static bool performedThreadAttach;
-
-void triggerThreadAttach() {
-    if (!performedThreadAttach) {
-        std::lock_guard<std::mutex> guard(attachHandlersMutex);
-        performedThreadAttach = true;
-        for (auto handler : attachHandlers) handler();
-    }
-}
 
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return dllLoader->loadedModules.find(moduleName) != dllLoader->loadedModules.end();
-}
-
-void EXPORTS_AddThreadAttachHandler(ThreadAttachHandler attachHandler) {
-    std::lock_guard<std::mutex> guard(attachHandlersMutex);
-    attachHandlers.push_back(attachHandler);
-    if (performedThreadAttach) attachHandler();
 }
 
 HLOADEDMODULE EXPORTS_LoadModule(const wchar_t* filePath) {
@@ -39,12 +23,12 @@ HLOADEDMODULE EXPORTS_LoadModule(const wchar_t* filePath) {
     return dllLoader->LoadModule(filePath);
 }
 
-FARPROC EXPORTS_GetModuleProcAddress(HLOADEDMODULE module, const char* symbolName) {
-    return MemoryGetProcAddress(module, symbolName);
+void* EXPORTS_GetModuleProcAddress(HLOADEDMODULE module, const char* symbolName) {
+    return reinterpret_cast<void*>(MemoryGetProcAddress(module, symbolName));
 }
 
-void discoverLoaderMods(std::unordered_map<std::string, HLOADEDMODULE> discoveredModules) {
-    std::filesystem::path directoryPath("loaders");
+void discoverLoaderMods(std::map<std::string, HLOADEDMODULE>& discoveredModules, const std::filesystem::path& rootGameDirectory) {
+    std::filesystem::path directoryPath = rootGameDirectory / "loaders";
     std::filesystem::create_directories(directoryPath);
     for (auto& file : std::filesystem::directory_iterator(directoryPath)) {
         if (file.is_regular_file() && file.path().extension() == ".dll") {
@@ -64,7 +48,7 @@ void discoverLoaderMods(std::unordered_map<std::string, HLOADEDMODULE> discovere
     }
 }
 
-void bootstrapLoaderMods(const std::unordered_map<std::string, HLOADEDMODULE>& discoveredModules, const std::wstring& executablePath) {
+void bootstrapLoaderMods(const std::map<std::string, HLOADEDMODULE>& discoveredModules, const std::wstring& gameRootDirectory) {
     for (auto& loaderModule : discoveredModules) {
         FARPROC bootstrapFunc = MemoryGetProcAddress(loaderModule.second, "BootstrapModule");
         if (bootstrapFunc == nullptr) {
@@ -72,12 +56,12 @@ void bootstrapLoaderMods(const std::unordered_map<std::string, HLOADEDMODULE>& d
             return;
         }
         BootstrapAccessors accessors{
-            executablePath,
+            gameRootDirectory,
             &EXPORTS_LoadModule,
             &EXPORTS_GetModuleProcAddress,
-            &EXPORTS_IsLoaderModuleLoaded,
-            &EXPORTS_AddThreadAttachHandler
+            &EXPORTS_IsLoaderModuleLoaded
         };
+        Logging::logFile << "Bootstrapping module " << loaderModule.first << std::endl;
         try {
             ((BootstrapModuleFunc) bootstrapFunc)(accessors);
         } catch (std::exception& ex) {
@@ -87,20 +71,47 @@ void bootstrapLoaderMods(const std::unordered_map<std::string, HLOADEDMODULE>& d
     }
 }
 
+static std::mutex setupHookMutex;
+static volatile bool hookAlreadySetup = false;
+
+std::filesystem::path resolveGameRootDir() {
+    wchar_t pathBuffer[2048]; //just to be sure it will always fit
+    GetModuleFileNameW(GetModuleHandleA(GAME_MODULE_NAME), pathBuffer, 2048);
+    std::filesystem::path rootDirPath{pathBuffer};
+    std::string gameFolderName(GAME_MODULE_NAME);
+    gameFolderName.erase(gameFolderName.find('-'));
+    //we go up the directory tree until we find the folder called
+    //FactoryGame, which denotes the root of the game directory
+    while (!std::filesystem::exists(rootDirPath / gameFolderName)) {
+        rootDirPath = rootDirPath.parent_path();
+    }
+    Logging::logFile << "Game Root Directory: " << rootDirPath.generic_string() << std::endl;
+    return rootDirPath;
+}
+
 void setupExecutableHook() {
+    //fast route to exit before locking on mutex
+    if (hookAlreadySetup) return;
+    std::lock_guard guard(setupHookMutex);
+    //check if we have loaded while we loaded on mutex
+    if (hookAlreadySetup) return;
+    hookAlreadySetup = true; //mark as loaded
+    //initialize systems, load symbols, call bootstrapper modules
     Logging::initializeLogging();
     Logging::logFile << "Setting up hooking" << std::endl;
+    std::filesystem::path rootGameDirectory = resolveGameRootDir();
+
     try {
         auto* resolver = new ImportResolver(GAME_MODULE_NAME);
         dllLoader = new DllLoader(resolver);
-        wchar_t pathBuffer[2048]; //just to be sure it will always fit
-        GetModuleFileNameW(GetModuleHandleA(GAME_MODULE_NAME), pathBuffer, 2048);
-        std::wstring executablePath{pathBuffer};
         Logging::logFile << "Discovering loader modules..." << std::endl;
-        std::unordered_map<std::string, HLOADEDMODULE> discoveredMods;
-        discoverLoaderMods(discoveredMods);
+        std::map<std::string, HLOADEDMODULE> discoveredMods;
+        discoverLoaderMods(discoveredMods, rootGameDirectory);
+
         Logging::logFile << "Bootstrapping loader modules..." << std::endl;
-        bootstrapLoaderMods(discoveredMods, executablePath);
+        bootstrapLoaderMods(discoveredMods, rootGameDirectory.generic_wstring());
+
+        Logging::logFile << "Successfully performed bootstrapping." << std::endl;
     } catch (std::exception& ex) {
         Logging::logFile << "[FATAL] Failed to initialize import resolver: " << ex.what() << std::endl;
         exit(1);

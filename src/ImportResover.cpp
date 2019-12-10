@@ -2,7 +2,6 @@
 #include "logging.h"
 
 #include <vector>
-#include <limits.h>
 #include <iostream>
 #include "naming_util.h"
 #include <psapi.h>
@@ -19,21 +18,12 @@ BOOL CALLBACK ProcessFunctionCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, v
     return false;
 }
 
-static const TCHAR* StaticConfigName() {
-    return TEXT("UObject");
-}
-
 ULONG64 findSymbolLocation(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& infoText, std::string& functionSignature) {
     std::vector<SymbolInfo> symbolInfo;
     std::string functionName = getFunctionName(functionSignature);
     SymEnumSymbols(hProcess, dllBase, functionName.c_str(), ProcessFunctionCallback, (void*) &symbolInfo);
     if (symbolInfo.empty()) {
         Logging::logFile << "Symbol not found in executable for: " << functionName << std::endl;
-        if (functionSignature.find("StaticConfigName") != std::string::npos) {
-            Logging::logFile << "This is dumb symbol. Redirecting..." << std::endl;
-            void* myDummyPointer = StaticConfigName;
-            return reinterpret_cast<ULONG64>(myDummyPointer);
-        }
         return NULL;
     }
     if (symbolInfo.size() == 1) {

@@ -1,5 +1,4 @@
 #include <Windows.h>
-#include <stdio.h>
 #include <iostream>
 #include "controller.h"
 
@@ -18,7 +17,6 @@ BOOL WINAPI DllMain( HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ) {
 		for (int i = 0; i < 12; i++) {
 			mProcs[i] = (UINT_PTR)GetProcAddress(mHinstDLL, mImportNames[i]);
 		}
-        setupExecutableHook();
 	}
 	else if (fdwReason == DLL_PROCESS_DETACH) {
 		FreeLibrary(mHinstDLL);
@@ -29,7 +27,7 @@ BOOL WINAPI DllMain( HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ) {
 	}
 	if ( fdwReason == DLL_THREAD_ATTACH) {
 		hooked = true;
-		triggerThreadAttach();
+		setupExecutableHook();
 	}
 	return ( TRUE );
 }
