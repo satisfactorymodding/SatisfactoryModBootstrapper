@@ -23,8 +23,8 @@ HLOADEDMODULE EXPORTS_LoadModule(const wchar_t* filePath) {
     return dllLoader->LoadModule(filePath);
 }
 
-void* EXPORTS_GetModuleProcAddress(HLOADEDMODULE module, const char* symbolName) {
-    return reinterpret_cast<void*>(MemoryGetProcAddress(module, symbolName));
+FUNCTION_PTR EXPORTS_GetModuleProcAddress(HLOADEDMODULE module, const char* symbolName) {
+    return MemoryGetProcAddress(module, symbolName);
 }
 
 void discoverLoaderMods(std::map<std::string, HLOADEDMODULE>& discoveredModules, const std::filesystem::path& rootGameDirectory) {
@@ -50,13 +50,13 @@ void discoverLoaderMods(std::map<std::string, HLOADEDMODULE>& discoveredModules,
 
 void bootstrapLoaderMods(const std::map<std::string, HLOADEDMODULE>& discoveredModules, const std::wstring& gameRootDirectory) {
     for (auto& loaderModule : discoveredModules) {
-        FARPROC bootstrapFunc = MemoryGetProcAddress(loaderModule.second, "BootstrapModule");
+        FUNCTION_PTR bootstrapFunc = MemoryGetProcAddress(loaderModule.second, "BootstrapModule");
         if (bootstrapFunc == nullptr) {
             Logging::logFile << "[WARNING]: BootstrapModule() not found in loader module " << loaderModule.first << "!" << std::endl;
             return;
         }
         BootstrapAccessors accessors{
-            gameRootDirectory,
+            gameRootDirectory.c_str(),
             &EXPORTS_LoadModule,
             &EXPORTS_GetModuleProcAddress,
             &EXPORTS_IsLoaderModuleLoaded
