@@ -35,7 +35,7 @@ void discoverLoaderMods(std::map<std::string, HLOADEDMODULE>& discoveredModules,
             Logging::logFile << "Discovering loader module candidate " << file.path().filename() << std::endl;
             HLOADEDMODULE loadedModule = nullptr;
             try {
-                loadedModule = dllLoader->LoadModule(file.path().generic_wstring().c_str());
+                loadedModule = dllLoader->LoadModule(nullptr, file.path().generic_wstring().c_str());
             } catch (std::exception& ex) {
                 Logging::logFile << "[FATAL] Failed to load module " << file.path().filename() << ": " << ex.what() << std::endl;
                 exit(1);
