@@ -74,16 +74,28 @@ HLOADEDMODULE DllLoader::LoadModule(const char* moduleName, const void* addr, si
     return static_cast<HMODULE>(handle);
 }
 
-HLOADEDMODULE DllLoader::LoadModule(const wchar_t* filePath) {
-    std::wstring fileName(filePath);
-    size_t lastSlashIndex = fileName.find_last_of('\\');
+std::string getModuleNameFromFilePath(const wchar_t* filePath) {
+    std::wstring moduleNameStr(filePath);
+    size_t lastSlashIndex = moduleNameStr.find_last_of('\\');
     if (lastSlashIndex == std::string::npos)
-        lastSlashIndex = fileName.find_last_of('/');
+        lastSlashIndex = moduleNameStr.find_last_of('/');
     if (lastSlashIndex != std::string::npos) {
-        fileName.erase(0,lastSlashIndex + 1);
+        moduleNameStr.erase(0, lastSlashIndex + 1);
+    }
+    char convertedName[500];
+    wcstombs_s(nullptr, convertedName, moduleNameStr.c_str(), 500);
+    return std::string(convertedName);
+}
+
+HLOADEDMODULE DllLoader::LoadModule(const char* moduleName, const wchar_t* filePath) {
+    std::string moduleNameResult;
+    if (moduleName == nullptr) {
+        moduleNameResult = getModuleNameFromFilePath(filePath);
+    } else {
+        moduleNameResult = std::string(moduleName);
     }
 
-    Logging::logFile << "Loading module from " << filePath << std::endl;
+    Logging::logFile << "Loading module " << moduleNameResult << " from " << filePath << std::endl;
     HANDLE fileHandle = CreateFileW(filePath, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (fileHandle == INVALID_HANDLE_VALUE) {
         std::string str("Failed to open module file: ");
@@ -103,11 +115,8 @@ HLOADEDMODULE DllLoader::LoadModule(const wchar_t* filePath) {
         str.append(lastErrorString);
         throw std::invalid_argument(str.c_str());
     }
-
-    char convertedName[500];
-    wcstombs_s(nullptr, convertedName, fileName.c_str(), 500);
     try {
-        HLOADEDMODULE result = LoadModule(convertedName, readBuffer, fileSize);
+        HLOADEDMODULE result = LoadModule(moduleNameResult.c_str(), readBuffer, fileSize);
         free(readBuffer);
         return result;
     } catch (std::exception& ex) {

@@ -14,13 +14,13 @@ bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return dllLoader->loadedModules.find(moduleName) != dllLoader->loadedModules.end();
 }
 
-HLOADEDMODULE EXPORTS_LoadModule(const wchar_t* filePath) {
+HLOADEDMODULE EXPORTS_LoadModule(const char* moduleName, const wchar_t* filePath) {
     if (dllLoader == nullptr) {
         Logging::logFile << "WARNING: loadPatchModule called before dllLoader was initialized!" << std::endl;
         return nullptr;
     }
-    Logging::logFile << "Attempting to load module: " << filePath << std::endl;
-    return dllLoader->LoadModule(filePath);
+    Logging::logFile << "Attempting to load module: " << moduleName << " from " << filePath << std::endl;
+    return dllLoader->LoadModule(moduleName, filePath);
 }
 
 FUNCTION_PTR EXPORTS_GetModuleProcAddress(HLOADEDMODULE module, const char* symbolName) {

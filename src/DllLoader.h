@@ -14,7 +14,7 @@ public:
 public:
     DllLoader(ImportResolver* importResolver) : resolver(importResolver) {};
 
-    HLOADEDMODULE LoadModule(const wchar_t* filePath);
+    HLOADEDMODULE LoadModule(const char* moduleName, const wchar_t* filePath);
 
     HLOADEDMODULE LoadModule(const char* moduleName, const void * addr, size_t size);
 };
