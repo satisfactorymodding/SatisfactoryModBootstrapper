@@ -27,6 +27,10 @@ FUNCTION_PTR EXPORTS_GetModuleProcAddress(HLOADEDMODULE module, const char* symb
     return MemoryGetProcAddress(module, symbolName);
 }
 
+FUNCTION_PTR EXPORTS_ResolveModuleSymbol(const char* symbolName) {
+    return reinterpret_cast<FUNCTION_PTR>(dllLoader->resolver->ResolveSymbol(symbolName));
+}
+
 void discoverLoaderMods(std::map<std::string, HLOADEDMODULE>& discoveredModules, const std::filesystem::path& rootGameDirectory) {
     std::filesystem::path directoryPath = rootGameDirectory / "loaders";
     std::filesystem::create_directories(directoryPath);
@@ -59,7 +63,8 @@ void bootstrapLoaderMods(const std::map<std::string, HLOADEDMODULE>& discoveredM
             gameRootDirectory.c_str(),
             &EXPORTS_LoadModule,
             &EXPORTS_GetModuleProcAddress,
-            &EXPORTS_IsLoaderModuleLoaded
+            &EXPORTS_IsLoaderModuleLoaded,
+            &EXPORTS_ResolveModuleSymbol
         };
         Logging::logFile << "Bootstrapping module " << loaderModule.first << std::endl;
         try {
