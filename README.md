@@ -23,3 +23,12 @@ addresses, retrieving root game directory path.
 List of the exposed properties can be modified in future releases,
 but changes are guaranteed to be backwards compatible.
 
+You can specify persistent module name independent from file name
+which will be used in linking by bootstrapper additionaly to file's normal name.
+Function signature as follows
+```
+#include "bootstrapper_exports.h"
+
+extern "C" DLLEXPORT const char* GetLinkageModuleName();
+```
+
