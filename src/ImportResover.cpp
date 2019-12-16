@@ -18,11 +18,41 @@ BOOL CALLBACK ProcessFunctionCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, v
     return false;
 }
 
+static const wchar_t* StaticConfigName_UObject() {
+    return L"UObject";
+}
+static const wchar_t* StaticConfigName_AActor() {
+    return L"AActor";
+}
+static const wchar_t* StaticConfigName_UActorComponent() {
+    return L"UActorComponent";
+}
+static const wchar_t* StaticConfigName_Default() {
+    return L"UnknownConfigName";
+}
+static void UnimplementedSymbol() {
+    Logging::logFile << "UnimplementedSymbol called!" << std::endl;
+    exit(0xBADCA11);
+}
+
+void* findBuiltinSymbolAddress(const std::string& functionName) {
+    if (functionName == "UObject::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_UObject);
+    if (functionName == "AActor::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_AActor);
+    if (functionName == "UActorComponent::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_UActorComponent);
+    if (functionName.find("::StaticConfigName") != std::string::npos) return reinterpret_cast<void*>(&StaticConfigName_Default);
+    if (functionName.find("FOutputDevice::") != std::string::npos) return reinterpret_cast<void*>(&UnimplementedSymbol);
+    return nullptr;
+}
+
 ULONG64 findSymbolLocation(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& infoText, std::string& functionSignature) {
     std::vector<SymbolInfo> symbolInfo;
     std::string functionName = getFunctionName(functionSignature);
     SymEnumSymbols(hProcess, dllBase, functionName.c_str(), ProcessFunctionCallback, (void*) &symbolInfo);
     if (symbolInfo.empty()) {
+        void* builtInFunctionAddress = findBuiltinSymbolAddress(functionName);
+        if (builtInFunctionAddress != nullptr) {
+            return reinterpret_cast<ULONG64>(builtInFunctionAddress);
+        }
         Logging::logFile << "Symbol not found in executable for: " << functionName << std::endl;
         return NULL;
     }
