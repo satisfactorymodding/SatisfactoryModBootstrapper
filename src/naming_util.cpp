@@ -2,7 +2,7 @@
 
 #include "naming_util.h"
 
-std::string getFunctionName(std::string& functionSignature) {
+std::string getFunctionName(const std::string& functionSignature) {
     uint64_t pos = functionSignature.find('(');
     uint64_t startPos = functionSignature.find_last_of(' ', pos) + 1;
     return functionSignature.substr(startPos, pos - startPos);

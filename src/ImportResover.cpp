@@ -8,16 +8,6 @@
 
 using namespace std;
 
-BOOL CALLBACK ProcessFunctionCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, void* UserContext) {
-    auto* resultVec = static_cast<vector<SymbolInfo>*>(UserContext);
-    SymbolInfo symbolInfo{};
-    symbolInfo.Name = pSymInfo->Name;
-    symbolInfo.Address = pSymInfo->Address;
-    symbolInfo.TypeId = pSymInfo->TypeIndex;
-    resultVec->push_back(symbolInfo);
-    return false;
-}
-
 static const wchar_t* StaticConfigName_UObject() {
     return L"UObject";
 }
@@ -35,44 +25,61 @@ static void UnimplementedSymbol() {
     exit(0xBADCA11);
 }
 
+struct SymbolLookupInfo {
+    const std::string& functionSignature;
+    CTypeInfoText& infoText;
+    bool foundTarget = false;
+    SymbolInfo resultInfo;
+    int symbolsFound = 0;
+    SymbolInfo lastFoundSymbolInfo;
+};
+
+BOOL CALLBACK ProcessFunctionCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, void* UserContext) {
+    auto *lookupInfo = static_cast<SymbolLookupInfo *>(UserContext);
+    SymbolInfo symbolInfo{};
+    symbolInfo.Name = pSymInfo->Name;
+    symbolInfo.Address = pSymInfo->Address;
+    symbolInfo.TypeId = pSymInfo->TypeIndex;
+    //we are fine with first symbol for non-functions, and functions should have their signature matching
+    if (pSymInfo->Tag != SymTagFunction || (createFunctionName(symbolInfo, lookupInfo->infoText) == lookupInfo->functionSignature)) {
+        lookupInfo->resultInfo = symbolInfo;
+        lookupInfo->foundTarget = true;
+        return false;
+    }
+    lookupInfo->lastFoundSymbolInfo = symbolInfo;
+    lookupInfo->symbolsFound++;
+    return false;
+}
+
 void* findBuiltinSymbolAddress(const std::string& functionName) {
     if (functionName == "UObject::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_UObject);
     if (functionName == "AActor::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_AActor);
     if (functionName == "UActorComponent::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_UActorComponent);
     if (functionName.find("::StaticConfigName") != std::string::npos) return reinterpret_cast<void*>(&StaticConfigName_Default);
-    if (functionName.find("FOutputDevice::") != std::string::npos) return reinterpret_cast<void*>(&UnimplementedSymbol);
     return nullptr;
 }
 
-ULONG64 findSymbolLocation(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& infoText, std::string& functionSignature) {
-    std::vector<SymbolInfo> symbolInfo;
+ULONG64 findSymbolLocation(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& infoText, const std::string& functionSignature) {
     std::string functionName = getFunctionName(functionSignature);
-    SymEnumSymbols(hProcess, dllBase, functionName.c_str(), ProcessFunctionCallback, (void*) &symbolInfo);
-    if (symbolInfo.empty()) {
-        void* builtInFunctionAddress = findBuiltinSymbolAddress(functionName);
-        if (builtInFunctionAddress != nullptr) {
-            return reinterpret_cast<ULONG64>(builtInFunctionAddress);
-        }
-        Logging::logFile << "Symbol not found in executable for: " << functionName << std::endl;
-        return NULL;
+    //try builtin symbol first
+    void* builtInFunctionAddress = findBuiltinSymbolAddress(functionName);
+    if (builtInFunctionAddress != nullptr) {
+        return reinterpret_cast<ULONG64>(builtInFunctionAddress);
     }
-    if (symbolInfo.size() == 1) {
-        //no need to iterate symbols and resolve types if there is only 1 symbol
-        return symbolInfo[0].Address;
+    //try to fast-find required symbol
+    SymbolLookupInfo lookupInfo{functionSignature, infoText};
+    SymEnumSymbols(hProcess, dllBase, functionName.c_str(), ProcessFunctionCallback, (void*) &lookupInfo);
+    if (lookupInfo.foundTarget) {
+        return lookupInfo.resultInfo.Address;
     }
-    Logging::logFile << "Multiple symbols (" << symbolInfo.size() << ") found for " << functionName << ", attempting signature match" << std::endl;
-    for (auto &symbolInfo1 : symbolInfo) {
-        std::string symbolSignature = createFunctionName(symbolInfo1, infoText);
-        if (symbolSignature == functionSignature) {
-            return symbolInfo1.Address;
-        }
+    //fast lookup failed; try first function found instead
+    if (lookupInfo.symbolsFound > 0) {
+        Logging::logFile << "Fast symbol lookup failed for symbol " << functionSignature << "; Using first symbol available" << std::endl;
+        return lookupInfo.lastFoundSymbolInfo.Address;
     }
-    Logging::logFile << "No matching symbol found in executable for: " << functionName << ". None of below matches: " << functionSignature << std::endl;
-    for (auto &symbolInfo1 : symbolInfo) {
-        std::string symbolSignature = createFunctionName(symbolInfo1, infoText);
-        Logging::logFile << "  " << symbolSignature << std::endl;
-    }
-    return NULL;
+    //Lookup failed; print warning and use unimplemented symbol
+    Logging::logFile << "Symbol not found in executable for: " << functionName << std::endl;
+    return reinterpret_cast<ULONG64>(reinterpret_cast<void*>(&UnimplementedSymbol));
 }
 
 ULONG64 findSymbolLocationDecorated(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& infoText, std::string& functionName) {

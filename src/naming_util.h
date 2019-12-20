@@ -12,7 +12,7 @@ struct SymbolInfo {
     uint64_t TypeId;
 };
 
-std::string getFunctionName(std::string& functionSignature);
+std::string getFunctionName(const std::string& functionSignature);
 
 void replaceAll(std::string& input, const char* text, const char* replacement, uint64_t limit = -1);
 
