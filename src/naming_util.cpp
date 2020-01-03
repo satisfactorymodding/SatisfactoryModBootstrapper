@@ -122,6 +122,10 @@ std::string createFunctionName(SymbolInfo& symbolInfo, CTypeInfoText& infoText) 
 }
 
 void replaceGenericShit(std::string& functionName) {
+    bool isFunctionSignature = functionName.find('(') != std::string::npos;
+    if (!isFunctionSignature) {
+        return; //code below works only for functions
+    }
     uint64_t currentPos;
     while ((currentPos = functionName.find('?')) != std::string::npos ||
             (currentPos = functionName.find('<')) != std::string::npos ||

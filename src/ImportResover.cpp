@@ -122,7 +122,9 @@ ULONG64 findSymbolLocationDecorated(HANDLE hProcess, ULONG64 dllBase, CTypeInfoT
     char undecoratedName[MAX_SYM_NAME];
     UnDecorateSymbolName(functionName.c_str(), undecoratedName, MAX_SYM_NAME, 0);
     functionName.assign(undecoratedName);
+    Logging::logFile << "UnDecorated name: " << functionName << std::endl;
     formatUndecoratedName(functionName);
+    Logging::logFile << "Formatted name: " << functionName << std::endl;
     return findSymbolLocation(hProcess, dllBase, infoText, functionName);
 }
 
