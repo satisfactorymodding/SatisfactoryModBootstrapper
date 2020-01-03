@@ -12,6 +12,8 @@ struct SymbolInfo {
     uint64_t TypeId;
 };
 
+double computeStringSimilarity(const std::string& string, const std::string& other);
+
 std::string getFunctionName(const std::string& functionSignature);
 
 void replaceAll(std::string& input, const char* text, const char* replacement, uint64_t limit = -1);

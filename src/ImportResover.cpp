@@ -20,8 +20,11 @@ static const wchar_t* StaticConfigName_UActorComponent() {
 static const wchar_t* StaticConfigName_Default() {
     return L"UnknownConfigName";
 }
+
 static void UnimplementedSymbol() {
     Logging::logFile << "UnimplementedSymbol called!" << std::endl;
+    Logging::logFile << "That means one of the symbols your module DLL referenced is not there, and it was called" << std::endl;
+    Logging::logFile << "Read this log from the start to pinpoint the issue" << std::endl;
     exit(0xBADCA11);
 }
 
@@ -31,7 +34,7 @@ struct SymbolLookupInfo {
     bool foundTarget = false;
     SymbolInfo resultInfo;
     int symbolsFound = 0;
-    SymbolInfo lastFoundSymbolInfo;
+    std::vector<SymbolInfo> allFoundSymbols;
 };
 
 BOOL CALLBACK ProcessFunctionCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, void* UserContext) {
@@ -40,18 +43,25 @@ BOOL CALLBACK ProcessFunctionCallback(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, v
     symbolInfo.Name = pSymInfo->Name;
     symbolInfo.Address = pSymInfo->Address;
     symbolInfo.TypeId = pSymInfo->TypeIndex;
-    //we are fine with first symbol for non-functions, and functions should have their signature matching
-    if (pSymInfo->Tag != SymTagFunction || (createFunctionName(symbolInfo, lookupInfo->infoText) == lookupInfo->functionSignature)) {
+    if (pSymInfo->Tag == SymTagFunction) {
+        //this is function, try fast lookup
+        if (createFunctionName(symbolInfo, lookupInfo->infoText) == lookupInfo->functionSignature) {
+            lookupInfo->resultInfo = symbolInfo;
+            lookupInfo->foundTarget = true;
+            return false; //stop enumeration
+        }
+    } else {
+        //this is something else, first match is fine
         lookupInfo->resultInfo = symbolInfo;
         lookupInfo->foundTarget = true;
-        return false;
+        return false; //stop enumeration
     }
-    lookupInfo->lastFoundSymbolInfo = symbolInfo;
+    lookupInfo->allFoundSymbols.push_back(symbolInfo);
     lookupInfo->symbolsFound++;
-    return false;
+    return true; //continue enumeration
 }
 
-void* findBuiltinSymbolAddress(const std::string& functionName) {
+void* findBuiltinSymbolAddress(const std::string& functionName, const std::string& functionSignature) {
     if (functionName == "UObject::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_UObject);
     if (functionName == "AActor::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_AActor);
     if (functionName == "UActorComponent::StaticConfigName") return reinterpret_cast<void*>(&StaticConfigName_UActorComponent);
@@ -62,7 +72,7 @@ void* findBuiltinSymbolAddress(const std::string& functionName) {
 ULONG64 findSymbolLocation(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& infoText, const std::string& functionSignature) {
     std::string functionName = getFunctionName(functionSignature);
     //try builtin symbol first
-    void* builtInFunctionAddress = findBuiltinSymbolAddress(functionName);
+    void* builtInFunctionAddress = findBuiltinSymbolAddress(functionName, functionSignature);
     if (builtInFunctionAddress != nullptr) {
         return reinterpret_cast<ULONG64>(builtInFunctionAddress);
     }
@@ -74,8 +84,34 @@ ULONG64 findSymbolLocation(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& info
     }
     //fast lookup failed; try first function found instead
     if (lookupInfo.symbolsFound > 0) {
-        Logging::logFile << "Fast symbol lookup failed for symbol " << functionSignature << "; Using first symbol available" << std::endl;
-        return lookupInfo.lastFoundSymbolInfo.Address;
+        bool listCandidates = true;
+        if (functionSignature.find("@GENERIC_TYPE@") != std::string::npos) {
+            //do not list candidates on generic functions, they're just broken.
+            listCandidates = false;
+            Logging::logFile << "Using levenshtein distance for generic function " << functionName << std::endl;
+        }
+        if (listCandidates) {
+            Logging::logFile << "Fast symbol lookup failed for symbol " << functionSignature << ", using levenshtein distance" << std::endl;
+            Logging::logFile << "Expected signature: " << functionSignature << std::endl;
+            Logging::logFile << "All possible candidates: " << std::endl;
+        }
+        SymbolInfo mostSimilarSymbol;
+        double maxSimilarity = 0.0;
+        for (auto& symbol : lookupInfo.allFoundSymbols) {
+            std::string symbolSignature = createFunctionName(symbol, infoText);
+            double similarity = computeStringSimilarity(functionSignature, symbolSignature);
+            if (similarity > maxSimilarity) {
+                maxSimilarity = similarity;
+                mostSimilarSymbol = symbol;
+            }
+            if (listCandidates) {
+                Logging::logFile << symbolSignature << std::endl;
+            }
+        }
+        if (listCandidates) {
+            Logging::logFile << "Picking most similar symbol " << mostSimilarSymbol.Name << std::endl;
+        }
+        return mostSimilarSymbol.Address;
     }
     //Lookup failed; print warning and use unimplemented symbol
     Logging::logFile << "Symbol not found in executable for: " << functionName << std::endl;
