@@ -128,15 +128,23 @@ void replaceGenericShit(std::string& functionName) {
     }
     uint64_t currentPos;
     while ((currentPos = functionName.find('?')) != std::string::npos ||
-            (currentPos = functionName.find('<')) != std::string::npos ||
-            (currentPos = functionName.find('>')) != std::string::npos) {
-        auto startIndex = functionName.find_last_of(',', currentPos);
-        if (startIndex == std::string::npos) startIndex = functionName.find('(');
-        auto endIndex = functionName.find(',', currentPos);
-        if (endIndex == std::string::npos) endIndex = functionName.find_last_of(')');
+            (currentPos = functionName.find('<')) != std::string::npos) {
+        auto startIndex = functionName.find_last_of(',', currentPos) + 1;
+		if (startIndex == std::string::npos) startIndex = functionName.find('(', currentPos) + 1;
+		if (startIndex == std::string::npos) startIndex = 0;
+		auto endIndex = currentPos;
+		int depth = 0;
+		do {
+			if (functionName[endIndex] == '<')
+				depth++;
+			if (functionName[endIndex] == '>')
+				depth--;
+			endIndex++;
+		} while (depth != 0);
+		endIndex--;
         //std::cout << functionName << " " << currentPos << " " << startIndex << " " << endIndex << std::endl;
-        functionName.erase(startIndex + 1, endIndex - startIndex - 1);
-        functionName.insert(startIndex + 1, "@GENERIC_TYPE@");
+        functionName.erase(startIndex, endIndex - startIndex + 1);
+        functionName.insert(startIndex, "@GENERIC_TYPE@");
         //std::cout << functionName << " " << std::endl;
     }
 }
