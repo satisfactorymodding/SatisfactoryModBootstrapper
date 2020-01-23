@@ -129,9 +129,10 @@ void replaceGenericShit(std::string& functionName) {
     uint64_t currentPos;
     while ((currentPos = functionName.find('?')) != std::string::npos ||
             (currentPos = functionName.find('<')) != std::string::npos) {
-        auto startIndex = functionName.find_last_of(',', currentPos) + 1;
-		if (startIndex == std::string::npos) startIndex = functionName.find('(', currentPos) + 1;
-		if (startIndex == std::string::npos) startIndex = 0;
+        auto startIndex = functionName.find_last_of(',', currentPos);
+		if (startIndex == std::string::npos) startIndex = functionName.find_last_of('(', currentPos);
+		if (startIndex == std::string::npos) startIndex = -1;
+		startIndex++;
 		auto endIndex = currentPos;
 		int depth = 0;
 		do {
