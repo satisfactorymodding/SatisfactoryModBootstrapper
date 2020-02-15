@@ -118,14 +118,32 @@ ULONG64 findSymbolLocation(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& info
     return reinterpret_cast<ULONG64>(reinterpret_cast<void*>(&UnimplementedSymbol));
 }
 
+// Implemented in VC CRT (msvcVERSION.dll or vcruntimeVERSION.dll or UCRT (Windows 10 only))
+extern "C"
+char * __unDName(
+	char * outputString,
+	const char * name,
+	int maxStringLength,
+	void * (*pAlloc)(size_t),
+	void(*pFree)(void *),
+	unsigned short disableFlags);
+
 ULONG64 findSymbolLocationDecorated(HANDLE hProcess, ULONG64 dllBase, CTypeInfoText& infoText, std::string& functionName) {
     char undecoratedName[MAX_SYM_NAME];
-    UnDecorateSymbolName(functionName.c_str(), undecoratedName, MAX_SYM_NAME, 0);
-    functionName.assign(undecoratedName);
-    Logging::logFile << "UnDecorated name: " << functionName << std::endl;
-    formatUndecoratedName(functionName);
-    Logging::logFile << "Formatted name: " << functionName << std::endl;
-    return findSymbolLocation(hProcess, dllBase, infoText, functionName);
+	Logging::logFile << "Decorated name: " << functionName << std::endl;
+	char * const pTmpUndName = __unDName(0, functionName.c_str(), 0, malloc, free, 0x0);
+	if (pTmpUndName) {
+		functionName.assign(pTmpUndName);
+		free(pTmpUndName);
+		Logging::logFile << "UnDecorated name: " << functionName << std::endl;
+		formatUndecoratedName(functionName);
+		Logging::logFile << "Formatted name: " << functionName << std::endl;
+		return findSymbolLocation(hProcess, dllBase, infoText, functionName);
+	}
+	else {
+		Logging::logFile << "Failed to undecorate name: " << functionName << std::endl;
+		return NULL;
+	}
 }
 
 void* ImportResolver::ResolveSymbol(std::string symbolName) {
