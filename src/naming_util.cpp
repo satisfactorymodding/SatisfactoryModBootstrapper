@@ -1,6 +1,8 @@
 #define MAX_TYPE_NAME 500
 
 #include "naming_util.h"
+#include <algorithm>
+#include "CTypeInfoText.h"
 
 std::string getFunctionName(const std::string& functionSignature) {
     uint64_t pos = functionSignature.find('(');

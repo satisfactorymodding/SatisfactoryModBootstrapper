@@ -108,6 +108,12 @@ void setupExecutableHook() {
 
     try {
         auto* resolver = new ImportResolver(GAME_MODULE_NAME);
+        HANDLE moduleHandle = GetModuleHandleA(GAME_MODULE_NAME);
+        void* agsDeInit = resolver->ResolveSymbol("void agsDeInit()");
+        Logging::logFile << "AGSDeInit: " << agsDeInit << std::endl;
+        auto offsetPtr = reinterpret_cast<ULONG64>(agsDeInit) - reinterpret_cast<ULONG64>(moduleHandle);
+        Logging::logFile << "Offset ptr: " << offsetPtr << std::endl;
+
         dllLoader = new DllLoader(resolver);
         Logging::logFile << "Discovering loader modules..." << std::endl;
         std::map<std::string, HLOADEDMODULE> discoveredMods;

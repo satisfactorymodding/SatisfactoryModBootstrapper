@@ -1,10 +1,8 @@
 #ifndef XINPUT1_3_NAMING_UTIL_H
 #define XINPUT1_3_NAMING_UTIL_H
 
-#include <limits>
 #include <string>
-#include <CTypeInfoText.h>
-#include <algorithm>
+class CTypeInfoText;
 
 struct SymbolInfo {
     std::string Name;

@@ -1,20 +1,24 @@
 #ifndef XINPUT1_3_IMPORTRESOVER_H
 #define XINPUT1_3_IMPORTRESOVER_H
 
-#include <Windows.h>
-#include <xstring>
-#include <CTypeInfoText.h>
+#include <cstdint>
+#include <string>
+
+typedef void* HMODULE;
+typedef void* HANDLE;
+class CTypeInfoDump;
+class CTypeInfoText;
 
 class ImportResolver {
 private:
     HMODULE hGamePrimaryModule;
     HANDLE hProcess;
-    ULONG64 gameDllBase;
+    uint64_t gameDllBase;
     CTypeInfoDump* typeInfoDump;
     CTypeInfoText* infoText;
 
 public:
-    ImportResolver(const char* gameModuleName);
+    explicit ImportResolver(const char* gameModuleName);
     ~ImportResolver();
 
     void* ResolveSymbol(std::string symbolName);

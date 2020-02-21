@@ -1,8 +1,6 @@
 #ifndef XINPUT1_3_EXPORTS_H
 #define XINPUT1_3_EXPORTS_H
 
-#include <string>
-
 typedef __int64 (__stdcall *FUNCTION_PTR)();
 typedef void* HLOADEDMODULE;
 typedef HLOADEDMODULE (*LoadModuleFunc)(const char* moduleName, const wchar_t* filePath);
