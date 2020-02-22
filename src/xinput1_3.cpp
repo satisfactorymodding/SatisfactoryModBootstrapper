@@ -1,8 +1,9 @@
-#include <Windows.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <iostream>
 #include "controller.h"
 
-HINSTANCE mHinst = 0, mHinstDLL = 0;
+HMODULE mHinst = 0, mHinstDLL = 0;
 extern "C" UINT_PTR mProcs[12] = {0};
 
 void load_original_dll();
@@ -10,7 +11,7 @@ void load_original_dll();
 static bool hooked = false;
 
 LPCSTR mImportNames[] = {"DllMain", "XInputEnable", "XInputGetBatteryInformation", "XInputGetCapabilities", "XInputGetDSoundAudioDeviceGuids", "XInputGetKeystroke", "XInputGetState", "XInputSetState", (LPCSTR)100, (LPCSTR)101, (LPCSTR)102, (LPCSTR)103};
-BOOL WINAPI DllMain( HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ) {
+BOOL WINAPI DllMain( HMODULE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ) {
 	mHinst = hinstDLL;
 	if (fdwReason == DLL_PROCESS_ATTACH) {
 		load_original_dll();
@@ -27,7 +28,7 @@ BOOL WINAPI DllMain( HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ) {
 	}
 	if ( fdwReason == DLL_THREAD_ATTACH) {
 		hooked = true;
-		setupExecutableHook();
+		setupExecutableHook(hinstDLL);
 	}
 	return ( TRUE );
 }

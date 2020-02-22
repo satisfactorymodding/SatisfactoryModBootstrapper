@@ -1,18 +1,19 @@
 #ifndef XINPUT1_3_DLLLOADER_H
 #define XINPUT1_3_DLLLOADER_H
 
-#include <Windows.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <unordered_map>
 #include <MemoryModule.h>
-#include "ImportResover.h"
+#include "SymbolResolver.h"
 
 class DllLoader {
 public:
-    ImportResolver* resolver;
+    SymbolResolver* resolver;
     std::unordered_map<std::string, HLOADEDMODULE> loadedModules;
 
 public:
-    DllLoader(ImportResolver* importResolver) : resolver(importResolver) {};
+    DllLoader(SymbolResolver* importResolver) : resolver(importResolver) {};
 
     HLOADEDMODULE LoadModule(const char* moduleName, const wchar_t* filePath);
 

@@ -1,7 +1,5 @@
 #include "DllLoader.h"
 #include "logging.h"
-#include "naming_util.h"
-#include <stdexcept>
 #include <fstream>
 
 struct ModuleInfo {
@@ -66,8 +64,8 @@ HLOADEDMODULE DllLoader::LoadModule(const char* moduleName, const void* addr, si
                                                MemoryFreeLibrarySafe,
                                                this);
     if (handle == nullptr) {
-        Logging::logFile << "Failed to load module " << moduleName << ": " << GetLastErrorAsString() << std::endl;
-        throw std::invalid_argument(GetLastErrorAsString().c_str());
+        Logging::logFile << "Failed to load module " << moduleName << std::endl;
+        return nullptr;
     }
     Logging::logFile << "Successfully loaded module " << moduleName << std::endl;
     this->loadedModules.insert({moduleName, handle});
@@ -94,33 +92,24 @@ HLOADEDMODULE DllLoader::LoadModule(const char* moduleName, const wchar_t* fileP
     } else {
         moduleNameResult = std::string(moduleName);
     }
-
-    Logging::logFile << "Loading module " << moduleNameResult << " from " << filePath << std::endl;
+    Logging::logFile << "Loading module " << moduleName << " from " << filePath << std::endl;
     HANDLE fileHandle = CreateFileW(filePath, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (fileHandle == INVALID_HANDLE_VALUE) {
-        std::string str("Failed to open module file: ");
-        str.append(GetLastErrorAsString());
-        throw std::invalid_argument(str.c_str());
+        Logging::logFile << "Failed to load module: unable to open module file";
+        return nullptr;
     }
 
     DWORD fileSize = GetFileSize(fileHandle, nullptr);
-    void* readBuffer = malloc(fileSize);
+    void *readBuffer = malloc(fileSize);
     bool success = ReadFile(fileHandle, readBuffer, fileSize, nullptr, nullptr);
-    std::string lastErrorString = GetLastErrorAsString();
     CloseHandle(fileHandle);
 
     if (!success) {
         free(readBuffer);
-        std::string str("Failed to read module file: ");
-        str.append(lastErrorString);
-        throw std::invalid_argument(str.c_str());
+        std::string str("Failed to read module file");
+        return nullptr;
     }
-    try {
-        HLOADEDMODULE result = LoadModule(moduleNameResult.c_str(), readBuffer, fileSize);
-        free(readBuffer);
-        return result;
-    } catch (std::exception& ex) {
-        free(readBuffer);
-        throw ex;
-    }
+    HLOADEDMODULE result = LoadModule(moduleNameResult.c_str(), readBuffer, fileSize);
+    free(readBuffer);
+    return result;
 }
