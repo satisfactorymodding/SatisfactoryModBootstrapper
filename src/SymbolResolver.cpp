@@ -3,6 +3,7 @@
 #include "atlbase.h"
 #include "comdef.h"
 #include "util.h"
+#include <psapi.h>
 
 #define CHECK_FAILED(hr, message) \
     if (FAILED(hr)) { \
@@ -29,6 +30,10 @@ SymbolResolver::SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, b
     CHECK_FAILED(hr, "Failed to update DLL load address on IDiaSession: ");
     hr = (*diaSession).get_globalScope(&globalSymbol);
     CHECK_FAILED(hr, "Failed to retrieve global DLL scope");
+
+	MODULEINFO moduleInfo;
+	GetModuleInformation(GetCurrentProcess(), GetModuleHandleA("FactoryGame-Win64-Shipping.exe"), &moduleInfo, sizeof(moduleInfo));
+	dllBaseAddress = moduleInfo.lpBaseOfDll;
 }
 
 void DummyUnresolvedSymbol() {
@@ -58,11 +63,11 @@ void* SymbolResolver::ResolveSymbol(const char* mangledSymbolName) {
     hr = enumSymbols->Item(0, &resolvedSymbol);
     CHECK_FAILED(hr, "Failed to retrieve first matching symbol: ");
     enumSymbols->Release(); //free symbol enumerator now
-    ULONGLONG resultAddress;
-    hr = resolvedSymbol->get_virtualAddress(&resultAddress);
-    CHECK_FAILED(hr, "Failed to retrieve symbol virtual address: ");
+    DWORD resultAddress;
+    hr = resolvedSymbol->get_relativeVirtualAddress(&resultAddress);
+    CHECK_FAILED(hr, "Failed to retrieve symbol relative virtual address: ");
     resolvedSymbol->Release(); //release resolved symbol
-    return reinterpret_cast<void *>(resultAddress);
+    return reinterpret_cast<void *>((unsigned long long)dllBaseAddress + resultAddress);
 }
 
 SymbolResolver::~SymbolResolver() = default;
