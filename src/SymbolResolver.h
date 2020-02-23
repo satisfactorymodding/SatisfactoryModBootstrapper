@@ -12,6 +12,7 @@ private:
     CComPtr<IDiaSession> diaSession;
     CComPtr<IDiaSymbol> globalSymbol;
     bool exitOnUnresolvedSymbol;
+	LPVOID dllBaseAddress;
 public:
     explicit SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, bool exitOnUnresolvedSymbol);
     ~SymbolResolver();

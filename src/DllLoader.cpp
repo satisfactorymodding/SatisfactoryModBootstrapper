@@ -92,7 +92,7 @@ HLOADEDMODULE DllLoader::LoadModule(const char* moduleName, const wchar_t* fileP
     } else {
         moduleNameResult = std::string(moduleName);
     }
-    Logging::logFile << "Loading module " << moduleName << " from " << filePath << std::endl;
+    Logging::logFile << "Loading module " << moduleNameResult.c_str() << " from " << filePath << std::endl;
     HANDLE fileHandle = CreateFileW(filePath, GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (fileHandle == INVALID_HANDLE_VALUE) {
         Logging::logFile << "Failed to load module: unable to open module file";
