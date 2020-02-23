@@ -4,6 +4,7 @@
 #include "comdef.h"
 #include "util.h"
 #include <psapi.h>
+#include "provided_symbols.h"
 
 // Implemented in VC CRT (msvcVERSION.dll or vcruntimeVERSION.dll or UCRT (Windows 10 only))
 extern "C" char * __unDName(char* outputString, const char* name, int maxStringLength, void* (*pAlloc)(size_t), void(*pFree)(void*), unsigned short disableFlags);
@@ -37,6 +38,7 @@ SymbolResolver::SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, b
 	MODULEINFO moduleInfo;
 	GetModuleInformation(GetCurrentProcess(), GetModuleHandleA("FactoryGame-Win64-Shipping.exe"), &moduleInfo, sizeof(moduleInfo));
 	dllBaseAddress = moduleInfo.lpBaseOfDll;
+	hookRequiredSymbols(*this);
 }
 
 void DummyUnresolvedSymbol() {
@@ -54,6 +56,10 @@ void* SymbolResolver::ResolveSymbol(const char* mangledSymbolName) {
     LONG symbolCount = 0L;
     enumSymbols->get_Count(&symbolCount);
     if (symbolCount == 0L) {
+        void* providedSymbolPointer = provideSymbolImplementation(mangledSymbolName);
+        if (providedSymbolPointer != nullptr) {
+            return providedSymbolPointer; //fallback to provided symbol
+        }
         Logging::logFile << "[FATAL] Executable missing symbol with mangled name: " << mangledSymbolName << std::endl;
         char* demangledName = __unDName(nullptr, mangledSymbolName, 0, malloc, free, 0);
         Logging::logFile << "[FATAL] De-mangled symbol name (for reference): " << demangledName << std::endl;
