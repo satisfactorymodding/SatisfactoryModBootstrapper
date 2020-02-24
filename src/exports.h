@@ -16,6 +16,7 @@ struct BootstrapAccessors {
     GetModuleProcAddress GetModuleProcAddress;
     IsLoaderModuleLoaded IsLoaderModuleLoaded;
     ResolveGameSymbol ResolveGameSymbol;
+    const wchar_t* version;
 };
 
 typedef void (*BootstrapModuleFunc)(BootstrapAccessors& accessors);

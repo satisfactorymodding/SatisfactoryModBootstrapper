@@ -14,6 +14,8 @@ using namespace std::filesystem;
 
 static DllLoader* dllLoader;
 
+extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.1";
+
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return dllLoader->loadedModules.find(moduleName) != dllLoader->loadedModules.end();
 }
@@ -69,7 +71,8 @@ void bootstrapLoaderMods(const std::map<std::string, HLOADEDMODULE>& discoveredM
             &EXPORTS_LoadModule,
             &EXPORTS_GetModuleProcAddress,
             &EXPORTS_IsLoaderModuleLoaded,
-            &EXPORTS_ResolveModuleSymbol
+            &EXPORTS_ResolveModuleSymbol,
+            bootstrapperVersion
         };
         Logging::logFile << "Bootstrapping module " << loaderModule.first << std::endl;
         ((BootstrapModuleFunc) bootstrapFunc)(accessors);
