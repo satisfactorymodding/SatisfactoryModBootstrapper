@@ -14,7 +14,7 @@ using namespace std::filesystem;
 
 static DllLoader* dllLoader;
 
-extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.1";
+extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.2";
 
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return dllLoader->loadedModules.find(moduleName) != dllLoader->loadedModules.end();
