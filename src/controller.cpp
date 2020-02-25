@@ -20,10 +20,6 @@ bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
 }
 
 MODULE_PTR EXPORTS_LoadModule(const char* moduleName, const wchar_t* filePath) {
-    if (dllLoader == nullptr) {
-        Logging::logFile << "WARNING: loadModule called before DllLoader is initialized!" << std::endl;
-        return nullptr;
-    }
     Logging::logFile << "Attempting to load module: " << moduleName << " from " << filePath << std::endl;
     return dllLoader->LoadModule(filePath);
 }
@@ -34,6 +30,10 @@ FUNCTION_PTR EXPORTS_GetModuleProcAddress(MODULE_PTR module, const char* symbolN
 
 FUNCTION_PTR EXPORTS_ResolveModuleSymbol(const char* symbolName) {
     return reinterpret_cast<FUNCTION_PTR>(dllLoader->resolver->ResolveSymbol(symbolName));
+}
+
+void EXPORTS_FlushDebugSymbols() {
+    dllLoader->FlushDebugSymbols();
 }
 
 std::string GetLastErrorAsString();
@@ -70,7 +70,8 @@ void bootstrapLoaderMods(const std::map<std::string, HMODULE>& discoveredModules
             &EXPORTS_GetModuleProcAddress,
             &EXPORTS_IsLoaderModuleLoaded,
             &EXPORTS_ResolveModuleSymbol,
-            bootstrapperVersion
+            bootstrapperVersion,
+            &EXPORTS_FlushDebugSymbols
         };
         Logging::logFile << "Bootstrapping module " << loaderModule.first << std::endl;
         ((BootstrapModuleFunc) bootstrapFunc)(accessors);
@@ -135,23 +136,4 @@ void setupExecutableHook(HMODULE selfModuleHandle) {
     bootstrapLoaderMods(discoveredMods, rootGameDirectory.wstring());
 
     Logging::logFile << "Successfully performed bootstrapping." << std::endl;
-}
-
-std::string GetLastErrorAsString() {
-    //Get the error message, if any.
-    DWORD errorMessageID = ::GetLastError();
-    if (errorMessageID == 0)
-        return std::string(); //No error message has been recorded
-
-    LPSTR messageBuffer = nullptr;
-    size_t size = FormatMessageA(
-            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-            nullptr, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR) &messageBuffer, 0, nullptr);
-
-    std::string message(messageBuffer, size);
-
-    //Free the buffer.
-    LocalFree(messageBuffer);
-
-    return message;
 }

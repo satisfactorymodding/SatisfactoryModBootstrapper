@@ -1,20 +1,28 @@
 #include "DllLoader.h"
 #include "logging.h"
+#include <Psapi.h>
+#include "util.h"
+#define MAX_NAME_LENGTH 2048
 
-DllLoader::DllLoader(SymbolResolver* importResolver) : resolver(importResolver) {}
+DllLoader::DllLoader(SymbolResolver* importResolver) : resolver(importResolver), dbgHelpModule(nullptr) {}
 
 typedef BOOL (WINAPI *DllEntryProc)(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved);
 
+typedef DWORD64 (__stdcall *SymLoadModuleExW)(HANDLE hProcess, HANDLE hFile, PCWSTR ImageName, PCWSTR ModuleName, DWORD64 BaseOfDll, DWORD DllSize, void* Data, DWORD Flags);
+typedef bool (__stdcall *SymSetSearchPathW)(HANDLE hProcess, PCWSTR SearchPathStr);
+typedef bool (__stdcall *SymUnloadModule64)(HANDLE hProcess, DWORD64 BaseOfDll);
+
 void UnprotectPageIfNeeded(void* pagePointer, DWORD pageRangeSize);
 
-bool ResolveDllImportsInternal(SymbolResolver* resolver, unsigned char* codeBase, PIMAGE_IMPORT_DESCRIPTOR importDesc);
+bool ResolveDllImportsInternal(std::unordered_set<std::string>& alreadyLoadedLibraries, SymbolResolver* resolver, unsigned char* codeBase, PIMAGE_IMPORT_DESCRIPTOR importDesc);
 
-inline bool startsWith(const char *pre, const char *str) {
-    return strncmp(pre, str, strlen(pre)) == 0;
-}
-
-HMODULE DllLoader::LoadModule(const wchar_t * filePath) {
-    auto* baseDll = reinterpret_cast<unsigned char *>(LoadLibraryExW(filePath, nullptr, DONT_RESOLVE_DLL_REFERENCES));
+HMODULE DllLoader::LoadModule(const path& filePath) {
+    HMODULE preloadedModule = GetModuleHandleW(filePath.filename().c_str());
+    if (preloadedModule != nullptr) {
+        //don't try to load the same module twice.
+        return preloadedModule;
+    }
+    auto* baseDll = reinterpret_cast<unsigned char *>(LoadLibraryExW(filePath.c_str(), nullptr, DONT_RESOLVE_DLL_REFERENCES));
     Logging::logFile << "Loaded Raw DLL module: " << baseDll << std::endl;
     auto dosHeader = (PIMAGE_DOS_HEADER) baseDll;
     Logging::logFile << "Casted module to dos header " << dosHeader << std::endl;
@@ -25,7 +33,7 @@ HMODULE DllLoader::LoadModule(const wchar_t * filePath) {
         Logging::logFile << "Import Directory Size: " << importsDir->Size << std::endl;
         auto baseImp = (PIMAGE_IMPORT_DESCRIPTOR) (baseDll + importsDir->VirtualAddress);
         UnprotectPageIfNeeded(reinterpret_cast<void*>(baseImp), importsDir->Size);
-        if (!ResolveDllImportsInternal(resolver, baseDll, baseImp)) {
+        if (!ResolveDllImportsInternal(alreadyLoadedLibraries, resolver, baseDll, baseImp)) {
             Logging::logFile << "LoadModule failed: Cannot resolve imports of the library" << std::endl;
             return nullptr;
         }
@@ -41,10 +49,64 @@ HMODULE DllLoader::LoadModule(const wchar_t * filePath) {
         }
     }
     Logging::logFile << "Called DllMain successfully on DLL. Loading finished." << std::endl;
+    TryToLoadModulePDB((HMODULE) baseDll);
     return (HINSTANCE) baseDll;
 }
 
-bool ResolveDllImportsInternal(SymbolResolver* resolver, unsigned char* codeBase, PIMAGE_IMPORT_DESCRIPTOR importDesc) {
+void loadModuleDbgInfo(HMODULE dbgHelpModule, HMODULE dllModule) {
+    HANDLE currentProcess = GetCurrentProcess();
+    auto loadFunc = reinterpret_cast<SymLoadModuleExW>(GetProcAddress(dbgHelpModule, "SymLoadModuleExW"));
+    auto unloadFunc = reinterpret_cast<SymUnloadModule64>(GetProcAddress(dbgHelpModule, "SymUnloadModule64"));
+    auto setSearchPathFunc = reinterpret_cast<SymSetSearchPathW>(GetProcAddress(dbgHelpModule, "SymSetSearchPathW"));
+    MODULEINFO moduleInfo{};
+    wchar_t moduleName[MAX_NAME_LENGTH] = {0};
+    wchar_t imageName[MAX_NAME_LENGTH] = {0};
+    GetModuleInformation(currentProcess, dllModule, &moduleInfo, sizeof(moduleInfo));
+    GetModuleFileNameExW(currentProcess, dllModule, imageName, MAX_NAME_LENGTH);
+    GetModuleBaseNameW(currentProcess, dllModule, moduleName, MAX_NAME_LENGTH);
+    const wchar_t* symbolSearchPath = path(imageName).parent_path().wstring().c_str();
+    setSearchPathFunc(currentProcess, symbolSearchPath);
+    //unload old module symbols if they were loaded via UE4's invasive load with invalid search path
+    unloadFunc(currentProcess, (DWORD64) moduleInfo.lpBaseOfDll);
+    DWORD64 resultAddr = loadFunc(currentProcess, dllModule, imageName, moduleName, (DWORD64) moduleInfo.lpBaseOfDll, (UINT32) moduleInfo.SizeOfImage, nullptr, 0);
+    if (!resultAddr) {
+        Logging::logFile << "Failed to load debug information for module " << path(imageName).string().c_str() << std::endl;
+        Logging::logFile << "Failure Reason: " << GetLastErrorAsString() << std::endl;
+    }
+}
+
+void DllLoader::FlushDebugSymbols() {
+    //only perform flushing if we don't have dbghelp initialized
+    if (dbgHelpModule == nullptr) {
+        dbgHelpModule = GetModuleHandleA("dbghelp.dll");
+        if (dbgHelpModule == nullptr) {
+            Logging::logFile << "[WARNING] FlushDebugSymbols called too early dbghelp.dll is not loaded yet." << std::endl;
+            return;
+        }
+        Logging::logFile << "Flushing debug symbols" << std::endl;
+        //DbgHelp is loaded now, so perform registering of all earlier entries
+        for (const auto& modulePath : delayedModulePDBs) {
+            LoadModulePDBInternal(modulePath);
+        }
+        delayedModulePDBs.clear();
+    }
+}
+
+void DllLoader::LoadModulePDBInternal(HMODULE dllModule) {
+    loadModuleDbgInfo(dbgHelpModule, dllModule);
+}
+
+void DllLoader::TryToLoadModulePDB(HMODULE module) {
+    if (dbgHelpModule == nullptr) {
+        //DbgHelp module is not initialized yet, delay loading
+        delayedModulePDBs.push_back(module);
+    } else {
+        //DbgHelp is ready to accept symbol initializations, so perform it
+        LoadModulePDBInternal(module);
+    }
+}
+
+bool ResolveDllImportsInternal(std::unordered_set<std::string>& alreadyLoadedLibraries, SymbolResolver* resolver, unsigned char* codeBase, PIMAGE_IMPORT_DESCRIPTOR importDesc) {
     for (; importDesc->Name; importDesc++) {
         uintptr_t *thunkRef;
         FARPROC *funcRef;
@@ -60,8 +122,13 @@ bool ResolveDllImportsInternal(SymbolResolver* resolver, unsigned char* codeBase
 
         HMODULE libraryHandle = GetModuleHandleA(libraryName);
         if (libraryHandle == nullptr) {
-            //load library if it doesn't exist, fallback to symbol resolver
-            libraryHandle = LoadLibraryA(libraryName);
+            std::string libraryNameString = libraryName;
+            //try to load library only once
+            if (alreadyLoadedLibraries.count(libraryNameString) == 0) {
+                //load library if it exists, fallback to symbol resolver
+                libraryHandle = LoadLibraryA(libraryName);
+                alreadyLoadedLibraries.insert(std::move(libraryNameString));
+            }
         }
         //iterate all thunk import entries and resolve them
         for (; *thunkRef; thunkRef++, funcRef++) {

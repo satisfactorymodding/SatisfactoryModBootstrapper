@@ -7,4 +7,6 @@
 
 std::wstring getModuleFileName(HMODULE moduleHandle);
 
+std::string GetLastErrorAsString();
+
 #endif //XINPUT1_3_UTIL_H
