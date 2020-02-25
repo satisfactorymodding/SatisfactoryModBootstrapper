@@ -2,7 +2,6 @@
 #include <windows.h>
 #include "logging.h"
 #include "DllLoader.h"
-#include <MemoryModule.h>
 #include <filesystem>
 #include <mutex>
 #include <map>
@@ -14,23 +13,23 @@ using namespace std::filesystem;
 
 static DllLoader* dllLoader;
 
-extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.2";
+extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.3";
 
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
-    return dllLoader->loadedModules.find(moduleName) != dllLoader->loadedModules.end();
+    return GetModuleHandleA(moduleName) != nullptr;
 }
 
-HLOADEDMODULE EXPORTS_LoadModule(const char* moduleName, const wchar_t* filePath) {
+MODULE_PTR EXPORTS_LoadModule(const char* moduleName, const wchar_t* filePath) {
     if (dllLoader == nullptr) {
-        Logging::logFile << "WARNING: loadPatchModule called before dllLoader was initialized!" << std::endl;
+        Logging::logFile << "WARNING: loadModule called before DllLoader is initialized!" << std::endl;
         return nullptr;
     }
     Logging::logFile << "Attempting to load module: " << moduleName << " from " << filePath << std::endl;
-    return dllLoader->LoadModule(moduleName, filePath);
+    return dllLoader->LoadModule(filePath);
 }
 
-FUNCTION_PTR EXPORTS_GetModuleProcAddress(HLOADEDMODULE module, const char* symbolName) {
-    return MemoryGetProcAddress(module, symbolName);
+FUNCTION_PTR EXPORTS_GetModuleProcAddress(MODULE_PTR module, const char* symbolName) {
+    return GetProcAddress(reinterpret_cast<HMODULE>(module), symbolName);
 }
 
 FUNCTION_PTR EXPORTS_ResolveModuleSymbol(const char* symbolName) {
@@ -39,14 +38,13 @@ FUNCTION_PTR EXPORTS_ResolveModuleSymbol(const char* symbolName) {
 
 std::string GetLastErrorAsString();
 
-void discoverLoaderMods(std::map<std::string, HLOADEDMODULE>& discoveredModules, const std::filesystem::path& rootGameDirectory) {
+void discoverLoaderMods(std::map<std::string, HMODULE>& discoveredModules, const std::filesystem::path& rootGameDirectory) {
     std::filesystem::path directoryPath = rootGameDirectory / "loaders";
     std::filesystem::create_directories(directoryPath);
     for (auto& file : std::filesystem::directory_iterator(directoryPath)) {
         if (file.is_regular_file() && file.path().extension() == ".dll") {
-            Logging::logFile << "Discovering loader module candidate " << file.path().filename() << std::endl;
-            HLOADEDMODULE loadedModule = nullptr;
-            loadedModule = dllLoader->LoadModule(nullptr, file.path().wstring().c_str());
+            Logging::logFile << "Discovering loader module candidate tetest " << file.path().filename() << std::endl;
+            HMODULE loadedModule = dllLoader->LoadModule(file.path().wstring().c_str());
             if (loadedModule != nullptr) {
                 Logging::logFile << "Successfully loaded module " << file.path().filename() << std::endl;
                 discoveredModules.insert({file.path().filename().string(), loadedModule});
@@ -59,9 +57,9 @@ void discoverLoaderMods(std::map<std::string, HLOADEDMODULE>& discoveredModules,
     }
 }
 
-void bootstrapLoaderMods(const std::map<std::string, HLOADEDMODULE>& discoveredModules, const std::wstring& gameRootDirectory) {
+void bootstrapLoaderMods(const std::map<std::string, HMODULE>& discoveredModules, const std::wstring& gameRootDirectory) {
     for (auto& loaderModule : discoveredModules) {
-        FUNCTION_PTR bootstrapFunc = MemoryGetProcAddress(loaderModule.second, "BootstrapModule");
+        FUNCTION_PTR bootstrapFunc = GetProcAddress(loaderModule.second, "BootstrapModule");
         if (bootstrapFunc == nullptr) {
             Logging::logFile << "[WARNING]: BootstrapModule() not found in loader module " << loaderModule.first << "!" << std::endl;
             return;
@@ -130,7 +128,7 @@ void setupExecutableHook(HMODULE selfModuleHandle) {
     auto *resolver = new SymbolResolver(gameModule, diaDllHandle, false);
     dllLoader = new DllLoader(resolver);
     Logging::logFile << "Discovering loader modules..." << std::endl;
-    std::map<std::string, HLOADEDMODULE> discoveredMods;
+    std::map<std::string, HMODULE> discoveredMods;
     discoverLoaderMods(discoveredMods, rootGameDirectory);
 
     Logging::logFile << "Bootstrapping loader modules..." << std::endl;

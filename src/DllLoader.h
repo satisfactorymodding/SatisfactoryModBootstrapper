@@ -4,20 +4,15 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <unordered_map>
-#include <MemoryModule.h>
 #include "SymbolResolver.h"
 
 class DllLoader {
 public:
     SymbolResolver* resolver;
-    std::unordered_map<std::string, HLOADEDMODULE> loadedModules;
-
 public:
-    DllLoader(SymbolResolver* importResolver) : resolver(importResolver) {};
+    explicit DllLoader(SymbolResolver* importResolver);
 
-    HLOADEDMODULE LoadModule(const char* moduleName, const wchar_t* filePath);
-
-    HLOADEDMODULE LoadModule(const char* moduleName, const void * addr, size_t size);
+    HMODULE LoadModule(const wchar_t* filePath);
 };
 
 

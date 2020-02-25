@@ -4,18 +4,18 @@
 #include <string>
 
 typedef __int64 (__stdcall *FUNCTION_PTR)();
-typedef void* HLOADEDMODULE;
-typedef HLOADEDMODULE (*LoadModuleFunc)(const char* moduleName, const wchar_t* filePath);
-typedef FUNCTION_PTR (*GetModuleProcAddress)(HLOADEDMODULE module, const char* symbolName);
-typedef bool (*IsLoaderModuleLoaded)(const char* moduleName);
-typedef FUNCTION_PTR(*ResolveGameSymbol)(const char* symbolName);
+typedef void* MODULE_PTR;
+typedef MODULE_PTR (*LoadModuleFunc)(const char* moduleName, const wchar_t* filePath);
+typedef FUNCTION_PTR (*GetModuleProcAddressFunc)(MODULE_PTR module, const char* symbolName);
+typedef bool (*IsLoaderModuleLoadedFunc)(const char* moduleName);
+typedef FUNCTION_PTR(*ResolveGameSymbolFunc)(const char* symbolName);
 
 struct BootstrapAccessors {
 	const wchar_t* gameRootDirectory;
     LoadModuleFunc LoadModule;
-    GetModuleProcAddress GetModuleProcAddress;
-    IsLoaderModuleLoaded IsLoaderModuleLoaded;
-    ResolveGameSymbol ResolveGameSymbol;
+    GetModuleProcAddressFunc GetModuleProcAddress;
+    IsLoaderModuleLoadedFunc IsLoaderModuleLoaded;
+    ResolveGameSymbolFunc ResolveGameSymbol;
     const wchar_t* version;
 };
 
