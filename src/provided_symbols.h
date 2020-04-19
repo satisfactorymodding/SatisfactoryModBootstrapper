@@ -1,5 +1,6 @@
 #ifndef XINPUT1_3_PROVIDED_SYMBOLS_H
 #define XINPUT1_3_PROVIDED_SYMBOLS_H
+#include "DestructorGenerator.h"
 #include "SymbolResolver.h"
 
 void hookRequiredSymbols(SymbolResolver& provider);

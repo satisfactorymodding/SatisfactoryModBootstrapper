@@ -1,3 +1,4 @@
+#include "DestructorGenerator.h"
 #include "SymbolResolver.h"
 #include "logging.h"
 #include "atlbase.h"

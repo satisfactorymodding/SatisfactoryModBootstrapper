@@ -6,8 +6,10 @@ enable_language(ASM_MASM)
 
 include_directories("C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.16.27023\\atlmfc\\include")
 include_directories("C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\DIA SDK\\include")
+include_directories("${PROJECT_SOURCE_DIR}/asmjit")
 
 file(GLOB source_list "src/*")
 add_library(xinput1_3 SHARED ${source_list})
 target_link_libraries(xinput1_3 "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\DIA SDK\\lib\\amd64\\diaguids.lib")
 target_link_libraries(xinput1_3 "C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Community\\VC\\Tools\\MSVC\\14.16.27023\\atlmfc\\lib\\x64\\atls.lib")
+target_link_libraries(xinput1_3 "${PROJECT_SOURCE_DIR}/lib/asmjit.lib")

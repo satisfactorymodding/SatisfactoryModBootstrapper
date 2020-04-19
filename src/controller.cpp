@@ -13,14 +13,13 @@ using namespace std::filesystem;
 
 static DllLoader* dllLoader;
 
-extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.4";
+extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.6";
 
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return GetModuleHandleA(moduleName) != nullptr;
 }
 
 MODULE_PTR EXPORTS_LoadModule(const char* moduleName, const wchar_t* filePath) {
-    Logging::logFile << "Attempting to load module: " << moduleName << " from " << filePath << std::endl;
     return dllLoader->LoadModule(filePath);
 }
 

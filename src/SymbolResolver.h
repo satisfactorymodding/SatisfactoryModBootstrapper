@@ -6,9 +6,11 @@
 #include <xstring>
 #include <atlbase.h>
 #include <dia2.h>
+#include <vector>
+#include <string>
 
 class SymbolResolver {
-private:
+public:
     CComPtr<IDiaSession> diaSession;
     CComPtr<IDiaSymbol> globalSymbol;
     bool exitOnUnresolvedSymbol;
