@@ -90,6 +90,10 @@ void* remapPrivateStaticClass(const char* mangledName) {
     return symbolResolver->ResolveSymbol(newSymbolName.c_str());
 }
 
+void* generateDummySymbol(const char* mangledName, DummyFunctionCallHandler CallHandler) {
+    return reinterpret_cast<void*>(destructorGenerator->GenerateDummyFunction(mangledName, CallHandler));
+}
+
 void* provideSymbolImplementation(const char* mangledName) {
     //string constructors
     if (strcmp(mangledName, "??0FString@@QEAA@XZ") == 0) {

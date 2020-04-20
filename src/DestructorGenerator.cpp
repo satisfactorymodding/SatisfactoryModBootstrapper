@@ -140,6 +140,35 @@ DestructorFunctionPtr DestructorGenerator::FindOrGenerateDestructorFunction(cons
     return GeneratedPtr;
 }
 
+DummyFunctionPtr DestructorGenerator::GenerateDummyFunction(const std::string& FunctionName, DummyFunctionCallHandler CallHandler) {
+    const auto iterator = GeneratedDummyFunctionsMap.find(FunctionName);
+    if (iterator != GeneratedDummyFunctionsMap.end()) {
+        return iterator->second;
+    }
+    DummyFunctionPtr GeneratedPtr = DoGenerateDummyFunction(FunctionName, CallHandler);
+    GeneratedDummyFunctionsMap.insert({FunctionName, GeneratedPtr});
+    return GeneratedPtr;
+}
+
+DummyFunctionPtr DestructorGenerator::DoGenerateDummyFunction(const std::string& FunctionName, DummyFunctionCallHandler CallHandler) {
+    size_t StringLength = FunctionName.length() + 1;
+    char* ConstantEntry = (char*) malloc(StringLength);
+    strcpy_s(ConstantEntry, StringLength, FunctionName.c_str());
+    ConstantPoolEntries.push_back(ConstantEntry);
+
+    asmjit::CodeHolder code;
+    code.init(runtime.codeInfo());
+    asmjit::x86::Builder a(&code);
+    a.mov(asmjit::x86::rcx, asmjit::imm(ConstantEntry));
+    a.call(asmjit::imm(CallHandler));
+    a.ret();
+
+    a.finalize();
+    DummyFunctionPtr ResultFunction;
+    runtime.add(&ResultFunction, &code);
+    return ResultFunction;
+}
+
 uint64_t ComputeStackSpaceRequired(IDiaEnumSymbols* ClassVariables) {
     uint64_t StackSpaceRequired = 32;
     ForEachSymbol(ClassVariables, [&StackSpaceRequired](const CComPtr<IDiaSymbol>& MemberVar) {
@@ -221,4 +250,10 @@ DestructorFunctionPtr DestructorGenerator::GenerateDestructor(const std::string&
         return nullptr;
     }
     return FindOrGenerateDestructorFunction(FirstUDTSymbol);
+}
+
+DestructorGenerator::~DestructorGenerator() {
+    for (char* ConstantEntry : ConstantPoolEntries) {
+        free(ConstantEntry);
+    }
 }

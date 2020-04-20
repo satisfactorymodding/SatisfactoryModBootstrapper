@@ -10,19 +10,25 @@
 #include <dia2.h>
 
 typedef void (*DestructorFunctionPtr)(void*);
+typedef void (*DummyFunctionPtr)();
+typedef void (*DummyFunctionCallHandler)(const char* FunctionName);
 
 class DestructorGenerator {
 private:
     CComPtr<IDiaSymbol> globalSymbol;
     LPVOID dllBaseAddress;
     std::unordered_map<std::wstring, DestructorFunctionPtr> GeneratedDestructorsMap;
+    std::unordered_map<std::string, DummyFunctionPtr> GeneratedDummyFunctionsMap;
     asmjit::JitRuntime runtime;
+    std::vector<char*> ConstantPoolEntries;
 public:
     DestructorGenerator(LPVOID gameDllBase, CComPtr<IDiaSymbol> globalSymbol) :
         globalSymbol(std::move(globalSymbol)),
         dllBaseAddress(gameDllBase) {}
+    ~DestructorGenerator();
 
     DestructorFunctionPtr GenerateDestructor(const std::string& ClassName);
+    DummyFunctionPtr GenerateDummyFunction(const std::string& FunctionName, DummyFunctionCallHandler CallHandler);
 private:
     /**
     * Generates destructor call for the given symbol
@@ -33,6 +39,7 @@ private:
     void GenerateDestructorCall(const CComPtr<IDiaSymbol>& Symbol, asmjit::x86::Builder& a, uint64_t StackOffset);
     DestructorFunctionPtr FindOrGenerateDestructorFunction(const CComPtr<IDiaSymbol>& ClassSymbol);
     DestructorFunctionPtr GenerateDestructorFunction(const CComPtr<IDiaSymbol>& ClassSymbol);
+    DummyFunctionPtr DoGenerateDummyFunction(const std::string& FunctionName, DummyFunctionCallHandler CallHandler);
 };
 
 

@@ -42,9 +42,10 @@ SymbolResolver::SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, b
 	hookRequiredSymbols(*this);
 }
 
-void DummyUnresolvedSymbol() {
+void DummyUnresolvedSymbolHandler(const char* symbolName) {
     Logging::logFile << "Attempt to call unresolved symbol from a loaded module code!!!" << std::endl;
     Logging::logFile << "This is a dummy symbol and it cannot be called. Aborting." << std::endl;
+    Logging::logFile << "Symbol Name: " << symbolName << std::endl;
     exit(1);
 }
 
@@ -70,7 +71,7 @@ void* SymbolResolver::ResolveSymbol(const char* mangledSymbolName) {
             exit(1);
         }
         Logging::logFile << "[FATAL] Overriding it with dummy symbol. Bad things will happen if it is going to be actually called!" << std::endl;
-        return reinterpret_cast<void*>(&DummyUnresolvedSymbol);
+        return generateDummySymbol(demangledName, &DummyUnresolvedSymbolHandler);
     }
     IDiaSymbol* resolvedSymbol;
     hr = enumSymbols->Item(0, &resolvedSymbol);
