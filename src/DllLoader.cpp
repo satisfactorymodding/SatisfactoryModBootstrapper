@@ -53,7 +53,8 @@ HMODULE DllLoader::LoadModule(const path& filePath) {
     return (HINSTANCE) baseDll;
 }
 
-void loadModuleDbgInfo(HMODULE dbgHelpModule, HMODULE dllModule) {
+/** @return path to directory containing DLL and PDB files */
+std::wstring loadModuleDbgInfo(HMODULE dbgHelpModule, HMODULE dllModule) {
     HANDLE currentProcess = GetCurrentProcess();
     auto loadFunc = reinterpret_cast<SymLoadModuleExW>(GetProcAddress(dbgHelpModule, "SymLoadModuleExW"));
     auto unloadFunc = reinterpret_cast<SymUnloadModule64>(GetProcAddress(dbgHelpModule, "SymUnloadModule64"));
@@ -66,6 +67,7 @@ void loadModuleDbgInfo(HMODULE dbgHelpModule, HMODULE dllModule) {
     GetModuleBaseNameW(currentProcess, dllModule, moduleName, MAX_NAME_LENGTH);
     const wchar_t* symbolSearchPath = path(imageName).parent_path().wstring().c_str();
     setSearchPathFunc(currentProcess, symbolSearchPath);
+
     //unload old module symbols if they were loaded via UE4's invasive load with invalid search path
     unloadFunc(currentProcess, (DWORD64) moduleInfo.lpBaseOfDll);
     DWORD64 resultAddr = loadFunc(currentProcess, dllModule, imageName, moduleName, (DWORD64) moduleInfo.lpBaseOfDll, (UINT32) moduleInfo.SizeOfImage, nullptr, 0);
@@ -73,6 +75,7 @@ void loadModuleDbgInfo(HMODULE dbgHelpModule, HMODULE dllModule) {
         Logging::logFile << "Failed to load debug information for module " << path(imageName).string().c_str() << std::endl;
         Logging::logFile << "Failure Reason: " << GetLastErrorAsString() << std::endl;
     }
+    return symbolSearchPath;
 }
 
 void DllLoader::FlushDebugSymbols() {
@@ -93,7 +96,8 @@ void DllLoader::FlushDebugSymbols() {
 }
 
 void DllLoader::LoadModulePDBInternal(HMODULE dllModule) {
-    loadModuleDbgInfo(dbgHelpModule, dllModule);
+    const std::wstring SymbolDirectory = loadModuleDbgInfo(dbgHelpModule, dllModule);
+    pdbRootDirectories.insert(SymbolDirectory);
 }
 
 void DllLoader::TryToLoadModulePDB(HMODULE module) {

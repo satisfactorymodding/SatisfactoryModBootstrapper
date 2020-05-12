@@ -13,17 +13,17 @@ using namespace std::filesystem;
 
 static DllLoader* dllLoader;
 
-extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.7";
+extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.8";
 
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return GetModuleHandleA(moduleName) != nullptr;
 }
 
-MODULE_PTR EXPORTS_LoadModule(const char* moduleName, const wchar_t* filePath) {
+void* EXPORTS_LoadModule(const char*, const wchar_t* filePath) {
     return dllLoader->LoadModule(filePath);
 }
 
-FUNCTION_PTR EXPORTS_GetModuleProcAddress(MODULE_PTR module, const char* symbolName) {
+FUNCTION_PTR EXPORTS_GetModuleProcAddress(void* module, const char* symbolName) {
     return GetProcAddress(reinterpret_cast<HMODULE>(module), symbolName);
 }
 
@@ -33,6 +33,22 @@ FUNCTION_PTR EXPORTS_ResolveModuleSymbol(const char* symbolName) {
 
 void EXPORTS_FlushDebugSymbols() {
     dllLoader->FlushDebugSymbols();
+}
+
+wchar_t* EXPORTS_GetSymbolFileRoots(void*(*Malloc)(uint64_t)) {
+    std::wstring Result;
+    for (const std::wstring& RootDirectory : dllLoader->pdbRootDirectories) {
+        Result.append(RootDirectory);
+        Result.append(SYMBOL_ROOT_SEPARATOR);
+    }
+    //remove last ';' appended if we appended anything at all
+    if (Result.length() > 0)
+        Result.erase(Result.length() - 1);
+    //string length + \0 terminator * size of wchar_t
+    const size_t AllocationSize = (Result.length() + 1) * sizeof(wchar_t);
+    void* AllocatedMemory = Malloc(AllocationSize);
+    memcpy(AllocatedMemory, Result.data(), AllocationSize);
+    return (wchar_t*) AllocatedMemory;
 }
 
 std::string GetLastErrorAsString();
@@ -70,7 +86,8 @@ void bootstrapLoaderMods(const std::map<std::string, HMODULE>& discoveredModules
             &EXPORTS_IsLoaderModuleLoaded,
             &EXPORTS_ResolveModuleSymbol,
             bootstrapperVersion,
-            &EXPORTS_FlushDebugSymbols
+            &EXPORTS_FlushDebugSymbols,
+            &EXPORTS_GetSymbolFileRoots
         };
         Logging::logFile << "Bootstrapping module " << loaderModule.first << std::endl;
         ((BootstrapModuleFunc) bootstrapFunc)(accessors);

@@ -12,6 +12,7 @@ using path = std::filesystem::path;
 class DllLoader {
 public:
     SymbolResolver* resolver;
+    std::unordered_set<std::wstring> pdbRootDirectories;
 private:
     std::unordered_set<std::string> alreadyLoadedLibraries;
     std::vector<HMODULE> delayedModulePDBs;

@@ -1,26 +1,32 @@
 #ifndef XINPUT1_3_EXPORTS_H
 #define XINPUT1_3_EXPORTS_H
 
-#include <string>
-
-typedef __int64 (__stdcall *FUNCTION_PTR)();
-typedef void* MODULE_PTR;
-typedef MODULE_PTR (*LoadModuleFunc)(const char* moduleName, const wchar_t* filePath);
-typedef FUNCTION_PTR (*GetModuleProcAddressFunc)(MODULE_PTR module, const char* symbolName);
-typedef bool (*IsLoaderModuleLoadedFunc)(const char* moduleName);
-typedef FUNCTION_PTR(*ResolveGameSymbolFunc)(const char* symbolName);
-typedef void (*FlushDebugSymbolsFunc)();
+typedef __int64(__stdcall *FUNCTION_PTR)();
+typedef void* HLOADEDMODULE;
+typedef HLOADEDMODULE(*LoadModuleFunc)(const char* unusedShouldBeEmptyString, const wchar_t* filePath);
+typedef FUNCTION_PTR(*GetModuleProcAddress)(HLOADEDMODULE module, const char* symbolName);
+typedef bool(*IsLoaderModuleLoaded)(const char* moduleName);
+typedef FUNCTION_PTR(*ResolveGameSymbolPtr)(const char* symbolName);
+typedef void(*FlushDebugSymbolsFunc)();
+/**
+ * @return list of symbol root directories joined by ';' symbol;
+ * @note Memory will be allocated my using provided malloc and **should be freed manually by the caller**
+ */
+#define SYMBOL_ROOT_SEPARATOR L";"
+typedef wchar_t* (*GetSymbolFileRootsFunc)(void*(*malloc)(unsigned long long));
 
 struct BootstrapAccessors {
-	const wchar_t* gameRootDirectory;
+    const wchar_t* gameRootDirectory;
     LoadModuleFunc LoadModule;
-    GetModuleProcAddressFunc GetModuleProcAddress;
-    IsLoaderModuleLoadedFunc IsLoaderModuleLoaded;
-    ResolveGameSymbolFunc ResolveGameSymbol;
+    GetModuleProcAddress GetModuleProcAddress;
+    IsLoaderModuleLoaded IsLoaderModuleLoaded;
+    ResolveGameSymbolPtr ResolveGameSymbol;
     const wchar_t* version;
     FlushDebugSymbolsFunc FlushDebugSymbols;
+    GetSymbolFileRootsFunc GetSymbolFileRoots;
 };
 
-typedef void (*BootstrapModuleFunc)(BootstrapAccessors& accessors);
+typedef void(*BootstrapModuleFunc)(BootstrapAccessors& accessors);
+typedef const char*(*GetLinkageModuleNameFunc)();
 
 #endif //XINPUT1_3_EXPORTS_H
