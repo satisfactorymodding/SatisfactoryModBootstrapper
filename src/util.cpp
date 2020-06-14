@@ -1,4 +1,6 @@
+#include <vector>
 #include "util.h"
+#include "logging.h"
 
 std::wstring getModuleFileName(HMODULE moduleHandle) {
     std::wstring resultBuffer(MAX_PATH, '\0');
@@ -17,7 +19,7 @@ std::wstring getModuleFileName(HMODULE moduleHandle) {
 
 std::string GetLastErrorAsString() {
     //Get the error message, if any.
-    DWORD errorMessageID = ::GetLastError();
+    DWORD errorMessageID = GetLastError();
     if (errorMessageID == 0)
         return std::string(); //No error message has been recorded
 

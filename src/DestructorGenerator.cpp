@@ -49,6 +49,7 @@ CComPtr<IDiaSymbol> FindFirstDestructorSymbol(const CComPtr<IDiaSymbol>& UDTSymb
         if (wcschr(UndecoratedName, '~')) {
             ResultSymbolPtr = FunctionSymbol;
         }
+        SysFreeString(UndecoratedName);
     });
     return ResultSymbolPtr;
 }
@@ -121,6 +122,7 @@ void DestructorGenerator::GenerateDestructorCall(const CComPtr<IDiaSymbol>& Symb
             ResultCallAddress = reinterpret_cast<uint64_t>(GeneratedPtr);
         }
         std::wcout << "Destructing UDT symbol " << ClassName << " with destructor symbol at " << ResultCallAddress << std::endl;
+        SysFreeString(ClassName);
         //Call result function now, with this placed in rcx
         a.call(ResultCallAddress);
     } else {
@@ -131,6 +133,7 @@ void DestructorGenerator::GenerateDestructorCall(const CComPtr<IDiaSymbol>& Symb
 DestructorFunctionPtr DestructorGenerator::FindOrGenerateDestructorFunction(const CComPtr<IDiaSymbol>& ClassSymbol) {
     GET(BSTR, ClassName, ClassSymbol->get_name);
     std::wstring ClassNameString(ClassName);
+    SysFreeString(ClassName);
     const auto iterator = GeneratedDestructorsMap.find(ClassNameString);
     if (iterator != GeneratedDestructorsMap.end()) {
         return iterator->second;
@@ -165,6 +168,39 @@ DummyFunctionPtr DestructorGenerator::DoGenerateDummyFunction(const std::string&
 
     a.finalize();
     DummyFunctionPtr ResultFunction;
+    runtime.add(&ResultFunction, &code);
+    return ResultFunction;
+}
+
+
+
+OpaqueFunctionPtr DestructorGenerator::GenerateConstructorPatchEntry(ConstructorCallbackEntry* CallBackEntry) {
+    asmjit::CodeHolder code;
+    code.init(runtime.codeInfo());
+    asmjit::x86::Builder a(&code);
+
+    //Move rcx (this) to home location, make fixed stack allocation
+    a.mov(asmjit::x86::qword_ptr(asmjit::x86::rsp, 8), asmjit::x86::rcx);
+    a.sub(asmjit::x86::rsp, 40);
+
+    //Retrieve original function pointer and call it
+    a.mov(asmjit::x86::rax, asmjit::imm(CallBackEntry));
+    a.call(asmjit::x86::qword_ptr(asmjit::x86::rax));
+
+    a.mov(asmjit::x86::rax, asmjit::imm(CallBackEntry));
+    //Move this from home location to rcx, userdata to rdx and function pointer to rax
+    a.mov(asmjit::x86::rcx, asmjit::x86::qword_ptr(asmjit::x86::rsp, 48));
+    a.mov(asmjit::x86::rdx, asmjit::x86::qword_ptr(asmjit::x86::rax, 16));
+    a.mov(asmjit::x86::rax, asmjit::x86::qword_ptr(asmjit::x86::rax, 8));
+    //Call function with provided arguments now
+    a.call(asmjit::x86::rax);
+
+    //Remove fixed allocation & ret
+    a.add(asmjit::x86::rsp, 40);
+    a.ret();
+
+    a.finalize();
+    OpaqueFunctionPtr ResultFunction;
     runtime.add(&ResultFunction, &code);
     return ResultFunction;
 }
@@ -208,7 +244,6 @@ DestructorFunctionPtr DestructorGenerator::GenerateDestructorFunction(const CCom
                 a.add(rcx, asmjit::imm(FieldOffset));
                 //rsp now points to the end of stack reservation (lowest point, but we reserve 32 bytes for function calls)
                 GenerateDestructorCall(VariableType, a, 32);
-                GET(BSTR, FieldName, MemberVar->get_name);
             }
         }
     });

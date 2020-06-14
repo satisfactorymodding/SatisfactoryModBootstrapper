@@ -13,6 +13,18 @@ typedef void (*DestructorFunctionPtr)(void*);
 typedef void (*DummyFunctionPtr)();
 typedef void (*DummyFunctionCallHandler)(const char* FunctionName);
 
+typedef void (*OpaqueFunctionPtr)();
+
+//--- DO NOT CHANGE LAYOUT OF THIS STRUCT - ASM CODE USES IT DIRECTLY ---
+struct ConstructorCallbackEntry {
+    //Generated thunk will jump to this address after calling
+    void* TrampolineFunctionAddress;
+    //Function that will be called with this and user data pointer
+    void* CallProcessor;
+    //User data passed to processor function. can be anything
+    void* UserData;
+};
+
 class DestructorGenerator {
 private:
     CComPtr<IDiaSymbol> globalSymbol;
@@ -29,6 +41,8 @@ public:
 
     DestructorFunctionPtr GenerateDestructor(const std::string& ClassName);
     DummyFunctionPtr GenerateDummyFunction(const std::string& FunctionName, DummyFunctionCallHandler CallHandler);
+    /** Generates constructor patch entry. CallBackEntry should be valid as long as returned function is used */
+    OpaqueFunctionPtr GenerateConstructorPatchEntry(ConstructorCallbackEntry* CallBackEntry);
 private:
     /**
     * Generates destructor call for the given symbol

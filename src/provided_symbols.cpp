@@ -1,13 +1,11 @@
 #include "provided_symbols.h"
 #include "logging.h"
 
-static DestructorGenerator* destructorGenerator;
 static SymbolResolver* symbolResolver;
 
 void hookRequiredSymbols(SymbolResolver& provider) {
     //hook symbols required to implement provided symbols here and store them in static variables
     symbolResolver = &provider;
-    destructorGenerator = new DestructorGenerator(symbolResolver->dllBaseAddress, symbolResolver->globalSymbol);
 }
 
 //??0FString@@QEAA@XZ - FString* FString::FString(void)
@@ -91,7 +89,7 @@ void* remapPrivateStaticClass(const char* mangledName) {
 }
 
 void* generateDummySymbol(const char* mangledName, DummyFunctionCallHandler CallHandler) {
-    return reinterpret_cast<void*>(destructorGenerator->GenerateDummyFunction(mangledName, CallHandler));
+    return reinterpret_cast<void*>(symbolResolver->destructorGenerator->GenerateDummyFunction(mangledName, CallHandler));
 }
 
 void* provideSymbolImplementation(const char* mangledName) {
@@ -112,7 +110,7 @@ void* provideSymbolImplementation(const char* mangledName) {
         std::string ClassName = GetClassNameFromDestructorMangledName(mangledName);
         Logging::logFile << "Providing default implementation for destructor of class: " << ClassName << std::endl;
         Logging::logFile << "Warning! It can result in memory leaks if object is not freed up properly." << std::endl;
-        DestructorFunctionPtr ResultPtr = destructorGenerator->GenerateDestructor(ClassName);
+        DestructorFunctionPtr ResultPtr = symbolResolver->destructorGenerator->GenerateDestructor(ClassName);
         if (ResultPtr == nullptr) {
             Logging::logFile << "[ERROR] Failed to generate destructor for class: Class Not Found in PDB: " << ClassName << std::endl;
             return nullptr;

@@ -7,13 +7,17 @@
 #include <map>
 #include "exports.h"
 #include "util.h"
+#include "DestructorGenerator.h"
+#include "VTableFixHelper.h"
+#include "AssemblyAnalyzer.h"
+
 using namespace std::filesystem;
 
 #define GAME_MODULE_NAME "FactoryGame-Win64-Shipping.exe"
 
 static DllLoader* dllLoader;
 
-extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.8";
+extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.9";
 
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return GetModuleHandleA(moduleName) != nullptr;
@@ -29,6 +33,48 @@ FUNCTION_PTR EXPORTS_GetModuleProcAddress(void* module, const char* symbolName) 
 
 FUNCTION_PTR EXPORTS_ResolveModuleSymbol(const char* symbolName) {
     return reinterpret_cast<FUNCTION_PTR>(dllLoader->resolver->ResolveSymbol(symbolName));
+}
+
+SymbolDigestInfo EXPORTS_DigestGameSymbol(const wchar_t* SymbolName) {
+    return dllLoader->resolver->DigestGameSymbol(SymbolName);
+}
+
+ConstructorHookThunk EXPORTS_CreateConstructorHookThunkFunc() {
+    auto* CallbackEntry = new ConstructorCallbackEntry;
+    CallbackEntry->CallProcessor = (void*) &ApplyConstructorFixes;
+    CallbackEntry->UserData = new ConstructorFixInfo{};
+    void* GeneratedThunk = (void*) dllLoader->resolver->destructorGenerator->GenerateConstructorPatchEntry(CallbackEntry);
+    ConstructorHookThunk HookThunk{};
+    HookThunk.OpaquePointer = CallbackEntry;
+    HookThunk.OutTrampolineAddress = &CallbackEntry->TrampolineFunctionAddress;
+    HookThunk.GeneratedThunkAddress = GeneratedThunk;
+    return HookThunk;
+}
+
+bool EXPORTS_AddConstructorHook(ConstructorHookThunk ConstructorThunk, VirtualFunctionHookInfo HookInfo) {
+    auto* CallbackEntry = reinterpret_cast<ConstructorCallbackEntry*>(ConstructorThunk.OpaquePointer);
+    auto* FixInfo = reinterpret_cast<ConstructorFixInfo*>(CallbackEntry->UserData);
+    MemberFunctionInfo FunctionInfo = DigestMemberFunctionPointer(HookInfo.MemberFunctionPointer, HookInfo.MemberFunctionPointerSize);
+    if (FunctionInfo.bIsVirtualFunctionThunk) {
+        VTableDefinition* TableDefinition = nullptr;
+        for (VTableDefinition& FixEntry : FixInfo->Fixes) {
+            if (FixEntry.VirtualTableOriginOffset == FunctionInfo.ThisAdjustment) {
+                TableDefinition = &FixEntry; break;
+            }
+        }
+        if (TableDefinition == nullptr) {
+            FixInfo->Fixes.push_back(VTableDefinition{});
+            TableDefinition = &FixInfo->Fixes[FixInfo->Fixes.size() - 1];
+        }
+        TableDefinition->bFlushCaches = true;
+        VTableFixEntry FixEntry{};
+        FixEntry.FunctionEntryOffset = FunctionInfo.VirtualTableOffset;
+        FixEntry.FunctionToCallInstead = HookInfo.FunctionToCallInstead;
+        FixEntry.OutOriginalFunctionPtr = HookInfo.OutOriginalFunctionPtr;
+        TableDefinition->FixEntries.push_back(FixEntry);
+        return true;
+    }
+    return false;
 }
 
 void EXPORTS_FlushDebugSymbols() {
@@ -87,7 +133,10 @@ void bootstrapLoaderMods(const std::map<std::string, HMODULE>& discoveredModules
             &EXPORTS_ResolveModuleSymbol,
             bootstrapperVersion,
             &EXPORTS_FlushDebugSymbols,
-            &EXPORTS_GetSymbolFileRoots
+            &EXPORTS_GetSymbolFileRoots,
+            &EXPORTS_DigestGameSymbol,
+            &EXPORTS_CreateConstructorHookThunkFunc,
+            &EXPORTS_AddConstructorHook
         };
         Logging::logFile << "Bootstrapping module " << loaderModule.first << std::endl;
         ((BootstrapModuleFunc) bootstrapFunc)(accessors);
@@ -142,8 +191,9 @@ void setupExecutableHook(HMODULE selfModuleHandle) {
         exit(1);
     }
     //TODO strict mode where missing symbols result in aborting?
-    auto *resolver = new SymbolResolver(gameModule, diaDllHandle, false);
+    auto* resolver = new SymbolResolver(gameModule, diaDllHandle, false);
     dllLoader = new DllLoader(resolver);
+
     Logging::logFile << "Discovering loader modules..." << std::endl;
     std::map<std::string, HMODULE> discoveredMods;
     discoverLoaderMods(discoveredMods, rootGameDirectory);

@@ -8,6 +8,7 @@
 #include <dia2.h>
 #include <vector>
 #include <string>
+#include "exports.h"
 
 class SymbolResolver {
 public:
@@ -15,10 +16,12 @@ public:
     CComPtr<IDiaSymbol> globalSymbol;
     bool exitOnUnresolvedSymbol;
 	LPVOID dllBaseAddress;
+    class DestructorGenerator* destructorGenerator;
 public:
     explicit SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, bool exitOnUnresolvedSymbol);
     ~SymbolResolver();
 
+    SymbolDigestInfo DigestGameSymbol(const wchar_t* SymbolName);
     void* ResolveSymbol(const char* mangledSymbolName);
 };
 

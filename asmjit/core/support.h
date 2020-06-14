@@ -362,6 +362,9 @@ static inline uint32_t constPopcnt(T x) noexcept { return Internal::constPopcntI
 // exactly the same as `std::min()` and `std::max()`. The return value is not
 // a reference to `a` or `b` but it's a new value instead.
 
+#undef min
+#undef max
+
 template<typename T>
 static constexpr T min(const T& a, const T& b) noexcept { return b < a ? b : a; }
 

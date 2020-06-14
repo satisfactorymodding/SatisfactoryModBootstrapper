@@ -39,6 +39,7 @@ SymbolResolver::SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, b
 	MODULEINFO moduleInfo;
 	GetModuleInformation(GetCurrentProcess(), GetModuleHandleA("FactoryGame-Win64-Shipping.exe"), &moduleInfo, sizeof(moduleInfo));
 	dllBaseAddress = moduleInfo.lpBaseOfDll;
+    destructorGenerator = new DestructorGenerator(dllBaseAddress, globalSymbol);
 	hookRequiredSymbols(*this);
 }
 
@@ -52,7 +53,7 @@ void DummyUnresolvedSymbolHandler(const char* symbolName) {
 void* SymbolResolver::ResolveSymbol(const char* mangledSymbolName) {
     USES_CONVERSION;
     const wchar_t* resultName = A2CW(mangledSymbolName);
-    IDiaEnumSymbols* enumSymbols;
+    CComPtr<IDiaEnumSymbols> enumSymbols;
     HRESULT hr = (*globalSymbol).findChildren(SymTagNull, resultName, nsfCaseSensitive, &enumSymbols);
     CHECK_FAILED(hr, "Failed find symbol in executable: ");
     LONG symbolCount = 0L;
@@ -73,15 +74,51 @@ void* SymbolResolver::ResolveSymbol(const char* mangledSymbolName) {
         Logging::logFile << "[FATAL] Overriding it with dummy symbol. Bad things will happen if it is going to be actually called!" << std::endl;
         return generateDummySymbol(demangledName, &DummyUnresolvedSymbolHandler);
     }
-    IDiaSymbol* resolvedSymbol;
+    CComPtr<IDiaSymbol> resolvedSymbol;
     hr = enumSymbols->Item(0, &resolvedSymbol);
     CHECK_FAILED(hr, "Failed to retrieve first matching symbol: ");
-    enumSymbols->Release(); //free symbol enumerator now
     DWORD resultAddress;
     hr = resolvedSymbol->get_relativeVirtualAddress(&resultAddress);
     CHECK_FAILED(hr, "Failed to retrieve symbol relative virtual address: ");
-    resolvedSymbol->Release(); //release resolved symbol
     return reinterpret_cast<void *>((unsigned long long)dllBaseAddress + resultAddress);
+}
+
+SymbolDigestInfo SymbolResolver::DigestGameSymbol(const wchar_t* SymbolName) {
+    CComPtr<IDiaEnumSymbols> enumSymbols;
+    HRESULT hr = (*globalSymbol).findChildren(SymTagNull, SymbolName, nsfCaseSensitive, &enumSymbols);
+    CHECK_FAILED(hr, "findChildren failed in executable");
+    LONG SymbolCount = 0L;
+    enumSymbols->get_Count(&SymbolCount);
+    SymbolDigestInfo ResultDigestInfo{};
+    if (SymbolCount == 0) {
+        ResultDigestInfo.bSymbolNotFound = true;
+        return ResultDigestInfo;
+    }
+    if (SymbolCount > 1) {
+        ResultDigestInfo.bMultipleSymbolsMatch = true;
+        return ResultDigestInfo;
+    }
+    CComPtr<IDiaSymbol> ResultSymbol;
+    enumSymbols->Item(0, &ResultSymbol);
+    ResultSymbol->get_undecoratedName(&ResultDigestInfo.SymbolName);
+    ResultDigestInfo.SymbolNameFree = &SysFreeString;
+    DWORD LocationType = 0;
+    ResultSymbol->get_locationType(&LocationType);
+    if (LocationType == LocIsNull) {
+        ResultDigestInfo.bSymbolOptimizedAway = LocationType == LocIsNull;
+        return ResultDigestInfo;
+    }
+    BOOL bIsVirtual = false;
+    ResultSymbol->get_virtual(&bIsVirtual);
+    ResultDigestInfo.bSymbolVirtual = bIsVirtual;
+
+    if (LocationType == LocIsStatic) {
+        DWORD RelativeVirtualAddress;
+        ResultSymbol->get_relativeVirtualAddress(&RelativeVirtualAddress);
+        void* SymbolPointer = reinterpret_cast<void*>((uint64_t)dllBaseAddress + RelativeVirtualAddress);
+        ResultDigestInfo.SymbolImplementationPointer = SymbolPointer;
+    }
+    return ResultDigestInfo;
 }
 
 SymbolResolver::~SymbolResolver() = default;
