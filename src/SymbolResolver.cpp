@@ -100,8 +100,8 @@ SymbolDigestInfo SymbolResolver::DigestGameSymbol(const wchar_t* SymbolName) {
     }
     CComPtr<IDiaSymbol> ResultSymbol;
     enumSymbols->Item(0, &ResultSymbol);
-    ResultSymbol->get_undecoratedName(&ResultDigestInfo.SymbolName);
-    ResultDigestInfo.SymbolNameFree = &SysFreeString;
+    ResultSymbol->get_undecoratedName(&ResultDigestInfo.SymbolName.String);
+    ResultDigestInfo.SymbolName.StringFree = &SysFreeString;
     DWORD LocationType = 0;
     ResultSymbol->get_locationType(&LocationType);
     if (LocationType == LocIsNull) {

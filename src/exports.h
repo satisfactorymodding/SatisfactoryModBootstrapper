@@ -40,7 +40,15 @@ typedef struct ConstructorHookThunk(*CreateConstructorHookThunkFunc)();
  */
 typedef bool(*AddConstructorHookFunc)(struct ConstructorHookThunk ConstructorThunk, struct VirtualFunctionHookInfo HookInfo);
 
+typedef struct MemberFunctionPointerDigestInfo(*DigestMemberFunctionPointerFunc)(struct MemberFunctionPointerInfo Info);
+
 typedef void(*FreeStringFunc)(wchar_t* String);
+
+struct BootstrapperString {
+    wchar_t* String;
+    FreeStringFunc StringFree;
+    inline void Free() const { StringFree(String); }
+};
 
 struct SymbolDigestInfo {
     bool bSymbolNotFound;
@@ -48,8 +56,7 @@ struct SymbolDigestInfo {
     bool bSymbolVirtual;
     bool bMultipleSymbolsMatch;
     void* SymbolImplementationPointer;
-    wchar_t* SymbolName;
-    FreeStringFunc SymbolNameFree;
+    BootstrapperString SymbolName;
 };
 
 struct ConstructorHookThunk {
@@ -59,9 +66,18 @@ struct ConstructorHookThunk {
     void** OutTrampolineAddress;
 };
 
-struct VirtualFunctionHookInfo {
+struct MemberFunctionPointerDigestInfo {
+    bool bIsVirtualFunctionPointer;
+    BootstrapperString UniqueName;
+};
+
+struct MemberFunctionPointerInfo {
     void* MemberFunctionPointer;
     int MemberFunctionPointerSize;
+};
+
+struct VirtualFunctionHookInfo {
+    MemberFunctionPointerInfo PointerInfo;
     void* FunctionToCallInstead;
     void** OutOriginalFunctionPtr;
 };
@@ -78,6 +94,7 @@ struct BootstrapAccessors {
     DigestGameSymbolFunc DigestGameSymbol;
     CreateConstructorHookThunkFunc CreateConstructorHookThunk;
     AddConstructorHookFunc AddConstructorHook;
+    DigestMemberFunctionPointerFunc DigestMemberFunctionPointer;
 };
 
 typedef void(*BootstrapModuleFunc)(BootstrapAccessors& accessors);

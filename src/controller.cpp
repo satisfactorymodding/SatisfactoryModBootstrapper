@@ -17,7 +17,7 @@ using namespace std::filesystem;
 
 static DllLoader* dllLoader;
 
-extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.9";
+extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.10";
 
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return GetModuleHandleA(moduleName) != nullptr;
@@ -51,10 +51,30 @@ ConstructorHookThunk EXPORTS_CreateConstructorHookThunkFunc() {
     return HookThunk;
 }
 
+void FreeString(wchar_t* Pointer) { free(Pointer); }
+
+MemberFunctionPointerDigestInfo EXPORTS_DigestMemberFunctionPointer(MemberFunctionPointerInfo Info) {
+    MemberFunctionInfo FunctionInfo = DigestMemberFunctionPointer(Info.MemberFunctionPointer, Info.MemberFunctionPointerSize);
+    std::wstring ResultUniqueName{};
+    ResultUniqueName.append(std::to_wstring(FunctionInfo.ThisAdjustment));
+    ResultUniqueName.append(L"_");
+    ResultUniqueName.append(std::to_wstring(FunctionInfo.VirtualTableOffset));
+
+    size_t StringMemorySize = sizeof(wchar_t) * (ResultUniqueName.size() + 1);
+    wchar_t* ResultMemory = (wchar_t*) malloc(StringMemorySize);
+    memcpy(ResultMemory, ResultUniqueName.data(), StringMemorySize);
+
+    MemberFunctionPointerDigestInfo DigestInfo{};
+    DigestInfo.bIsVirtualFunctionPointer = FunctionInfo.bIsVirtualFunctionThunk;
+    DigestInfo.UniqueName.String = ResultMemory;
+    DigestInfo.UniqueName.StringFree = &FreeString;
+    return DigestInfo;
+}
+
 bool EXPORTS_AddConstructorHook(ConstructorHookThunk ConstructorThunk, VirtualFunctionHookInfo HookInfo) {
     auto* CallbackEntry = reinterpret_cast<ConstructorCallbackEntry*>(ConstructorThunk.OpaquePointer);
     auto* FixInfo = reinterpret_cast<ConstructorFixInfo*>(CallbackEntry->UserData);
-    MemberFunctionInfo FunctionInfo = DigestMemberFunctionPointer(HookInfo.MemberFunctionPointer, HookInfo.MemberFunctionPointerSize);
+    MemberFunctionInfo FunctionInfo = DigestMemberFunctionPointer(HookInfo.PointerInfo.MemberFunctionPointer, HookInfo.PointerInfo.MemberFunctionPointerSize);
     if (FunctionInfo.bIsVirtualFunctionThunk) {
         VTableDefinition* TableDefinition = nullptr;
         for (VTableDefinition& FixEntry : FixInfo->Fixes) {
@@ -136,7 +156,8 @@ void bootstrapLoaderMods(const std::map<std::string, HMODULE>& discoveredModules
             &EXPORTS_GetSymbolFileRoots,
             &EXPORTS_DigestGameSymbol,
             &EXPORTS_CreateConstructorHookThunkFunc,
-            &EXPORTS_AddConstructorHook
+            &EXPORTS_AddConstructorHook,
+            &EXPORTS_DigestMemberFunctionPointer
         };
         Logging::logFile << "Bootstrapping module " << loaderModule.first << std::endl;
         ((BootstrapModuleFunc) bootstrapFunc)(accessors);
