@@ -17,7 +17,7 @@ using namespace std::filesystem;
 
 static DllLoader* dllLoader;
 
-extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.10";
+extern "C" __declspec(dllexport) const wchar_t* bootstrapperVersion = L"2.0.11";
 
 bool EXPORTS_IsLoaderModuleLoaded(const char* moduleName) {
     return GetModuleHandleA(moduleName) != nullptr;
@@ -83,7 +83,7 @@ bool EXPORTS_AddConstructorHook(ConstructorHookThunk ConstructorThunk, VirtualFu
             }
         }
         if (TableDefinition == nullptr) {
-            FixInfo->Fixes.push_back(VTableDefinition{});
+            FixInfo->Fixes.push_back(VTableDefinition{FunctionInfo.ThisAdjustment});
             TableDefinition = &FixInfo->Fixes[FixInfo->Fixes.size() - 1];
         }
         TableDefinition->bFlushCaches = true;
