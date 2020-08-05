@@ -35,9 +35,7 @@ SymbolResolver::SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, b
     CHECK_FAILED(hr, "Failed to update DLL load address on IDiaSession: ");
     hr = (*diaSession).get_globalScope(&globalSymbol);
     CHECK_FAILED(hr, "Failed to retrieve global DLL scope");
-    MODULEINFO moduleInfo;
-    GetModuleInformation(GetCurrentProcess(), gameModuleHandle, &moduleInfo, sizeof(moduleInfo));
-    dllBaseAddress = moduleInfo.lpBaseOfDll;
+    dllBaseAddress = (LPVOID) gameModuleHandle;
     destructorGenerator = new DestructorGenerator(dllBaseAddress, globalSymbol);
     hookRequiredSymbols(*this);
 }
