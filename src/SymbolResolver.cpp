@@ -31,7 +31,7 @@ SymbolResolver::SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, b
     hr = (*dataSource).openSession(&diaSession);
     CHECK_FAILED(hr, "Failed to open DIA session: ");
     //because HMODULE value is the same as the DLL load base address, according to the MS documentation
-    hr = (*diaSession).put_loadAddress(reinterpret_cast<ULONGLONG>(diaDllHandle));
+    hr = (*diaSession).put_loadAddress(reinterpret_cast<ULONGLONG>(gameModuleHandle));
     CHECK_FAILED(hr, "Failed to update DLL load address on IDiaSession: ");
     hr = (*diaSession).get_globalScope(&globalSymbol);
     CHECK_FAILED(hr, "Failed to retrieve global DLL scope");
