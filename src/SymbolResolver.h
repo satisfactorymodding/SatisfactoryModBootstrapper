@@ -15,7 +15,7 @@ public:
     CComPtr<IDiaSession> diaSession;
     CComPtr<IDiaSymbol> globalSymbol;
     bool exitOnUnresolvedSymbol;
-	LPVOID dllBaseAddress;
+    LPVOID dllBaseAddress;
     class DestructorGenerator* destructorGenerator;
 public:
     explicit SymbolResolver(HMODULE gameModuleHandle, HMODULE diaDllHandle, bool exitOnUnresolvedSymbol);
