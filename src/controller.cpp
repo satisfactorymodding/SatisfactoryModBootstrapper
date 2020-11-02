@@ -175,9 +175,17 @@ std::filesystem::path resolveGameRootDir() {
     gameFolderName.erase(gameFolderName.find('-'));
     //we go up the directory tree until we find the folder called
     //FactoryGame, which denotes the root of the game directory
-    while (!std::filesystem::exists(rootDirPath / gameFolderName)) {
+    
+    // Old code to get the root of the game directory.
+    /*while (!std::filesystem::exists(rootDirPath / gameFolderName)) {
         rootDirPath = rootDirPath.parent_path();
-    }
+        Logging::logFile << "Root dir path " << rootDirPath << std::endl;
+    }*/
+
+    // Bug fix.
+    // This fixes a bug where on Linux the root of the game directory cannot be found.
+    // This fix also works on Windows!
+    rootDirPath = rootDirPath.parent_path().parent_path().parent_path().parent_path();
     return rootDirPath;
 }
 
@@ -192,7 +200,6 @@ void setupExecutableHook(HMODULE selfModuleHandle) {
     //initialize systems, load symbols, call bootstrapper modules
     Logging::initializeLogging();
     Logging::logFile << "Setting up hooking" << std::endl;
-
     path rootGameDirectory = resolveGameRootDir();
     path bootstrapperDirectory = path(getModuleFileName(selfModuleHandle)).parent_path();
     Logging::logFile << "Game Root Directory: " << rootGameDirectory << std::endl;
